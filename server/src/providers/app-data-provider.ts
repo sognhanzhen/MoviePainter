@@ -7,10 +7,13 @@ import type {
   UserProfileRecord,
   UserSettingsInput,
   UserSettingsRecord,
+  WorkspaceAssetRecordInput,
+  WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
 } from "../domain/app-data";
 import type { LocalDatabase } from "../lib/local-database";
+import type { AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
 import { createLocalAppDataProvider } from "./local-app-data-provider";
 import { createSupabaseAppDataProvider } from "./supabase-app-data-provider";
 
@@ -22,17 +25,22 @@ export type AppDataProvider = {
   getPosters: () => Promise<ProviderResult<PosterRecord[]>>;
   getProfile: (user: AuthenticatedUser) => Promise<ProviderResult<UserProfileRecord>>;
   getUserSettings: (user: AuthenticatedUser) => Promise<ProviderResult<UserSettingsRecord>>;
+  recordWorkspaceAsset: (input: { asset: WorkspaceAssetRecordInput; user: AuthenticatedUser }) => Promise<ProviderResult<WorkspaceAssetRecordResponse>>;
   updateUserSettings: (input: { settings: UserSettingsInput; user: AuthenticatedUser }) => Promise<ProviderResult<UserSettingsRecord>>;
 };
 
 type CreateAppDataProviderInput = {
+  imageGeneratorConfig: AicanapiImageGeneratorConfig;
   database: LocalDatabase;
   supabaseServiceRoleKey: string;
   supabaseUrl: string;
 };
 
 export function createAppDataProvider(input: CreateAppDataProviderInput): AppDataProvider {
-  const localProvider = createLocalAppDataProvider(input.database);
+  const localProvider = createLocalAppDataProvider({
+    database: input.database,
+    imageGeneratorConfig: input.imageGeneratorConfig
+  });
 
   if (!input.supabaseUrl || !input.supabaseServiceRoleKey) {
     return localProvider;
@@ -40,6 +48,7 @@ export function createAppDataProvider(input: CreateAppDataProviderInput): AppDat
 
   return createSupabaseAppDataProvider({
     fallback: localProvider,
+    imageGeneratorConfig: input.imageGeneratorConfig,
     supabaseServiceRoleKey: input.supabaseServiceRoleKey,
     supabaseUrl: input.supabaseUrl
   });

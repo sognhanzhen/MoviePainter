@@ -5,8 +5,7 @@ const navigationItems = [
   { label: "生成工作区", path: "/workspace?mode=chat" },
   { label: "海报库", path: "/library" },
   { label: "历史记录", path: "/history" },
-  { label: "个人设置", path: "/settings" },
-  { label: "后台管理", path: "/admin" }
+  { label: "个人设置", path: "/settings" }
 ];
 
 export function AppShell() {

@@ -49,6 +49,8 @@ export type HistoryRecord = {
   outputs: number;
   sourceOrigin?: string;
   posterId: string;
+  previewImageUrl?: string | null;
+  previewTitle?: string | null;
   prompt: string;
   errorMessage?: string | null;
   status: "failed" | "running" | "succeeded" | "waiting";
@@ -115,21 +117,35 @@ export type UserProfileRecord = {
 
 export type WorkspaceGenerationInput = {
   mode: WorkspaceMode;
+  modelId?: "doubao-seedance-5" | "nano-banana-2";
   moduleWeights: Record<string, number>;
   posterId: string;
   prompt: string;
+  ratioId?: string;
   selectedModules: string[];
+  sourceOrigin?: string;
+};
+
+export type WorkspaceAssetAction = "library_use" | "workspace_use";
+
+export type WorkspaceAssetRecordInput = {
+  action: WorkspaceAssetAction;
+  mode: WorkspaceMode;
+  posterId: string;
+  prompt?: string;
   sourceOrigin?: string;
 };
 
 export type WorkspaceGenerationTask = {
   appliedModules: string[];
   id: string;
+  modelId?: "doubao-seedance-5" | "nano-banana-2";
   mode: WorkspaceMode;
   moduleWeights: Record<string, number>;
   posterId: string;
   posterTitle: string;
   prompt: string;
+  ratioId?: string;
   status: "succeeded";
   submittedAt: string;
 };
@@ -146,6 +162,11 @@ export type WorkspaceGenerationResponse = {
   results: WorkspaceGeneratedResult[];
   source: AppDataSource;
   task: WorkspaceGenerationTask;
+};
+
+export type WorkspaceAssetRecordResponse = {
+  record: HistoryRecord;
+  source: AppDataSource;
 };
 
 export type ProviderResult<T> = {

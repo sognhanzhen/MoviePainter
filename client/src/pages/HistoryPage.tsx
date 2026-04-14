@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { GenerationStatusPill } from "../components/GenerationStatusPill";
 import { historyRecords, posterRecords, type HistoryRecord, type PosterRecord } from "../data/posters";
-import { getCachedHistoryRecords, mergeHistoryRecords } from "../lib/history-cache";
+import { getCachedHistoryRecord, getCachedHistoryRecords, mergeHistoryRecords, saveHistoryRecordsSnapshot } from "../lib/history-cache";
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
 import { appDataRequest } from "../lib/api";
 
@@ -12,14 +12,22 @@ export function HistoryPage() {
   const { posters } = usePosterCatalog(token);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("正在加载你的历史生成记录...");
+  const [message, setMessage] = useState("加载中");
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadHistory() {
-      setLoading(true);
-      setMessage("正在加载你的历史生成记录...");
+      const cachedRecords = getCachedHistoryRecords();
+
+      if (cachedRecords.length > 0) {
+        setRecords(cachedRecords);
+        setLoading(false);
+        setMessage("本地缓存，同步中");
+      } else {
+        setLoading(true);
+        setMessage("加载中");
+      }
 
       try {
         const response = await appDataRequest.getHistory(token);
@@ -29,8 +37,9 @@ export function HistoryPage() {
         }
 
         const mergedRecords = mergeHistoryRecords(response.records, getCachedHistoryRecords());
+        saveHistoryRecordsSnapshot(mergedRecords);
         setRecords(mergedRecords.length > 0 ? mergedRecords : historyRecords);
-        setMessage(`已接入 ${response.source} 数据源。`);
+        setMessage(`已同步 ${response.source}`);
       } catch (error) {
         if (cancelled) {
           return;
@@ -38,11 +47,7 @@ export function HistoryPage() {
 
         const cachedRecords = getCachedHistoryRecords();
         setRecords(cachedRecords.length > 0 ? cachedRecords : historyRecords);
-        setMessage(
-          error instanceof Error
-            ? `${error.message}，当前先展示本地缓存或演示记录。`
-            : "历史记录加载失败，当前先展示本地缓存或演示记录。"
-        );
+        setMessage(error instanceof Error ? error.message : "历史记录加载失败");
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -54,11 +59,11 @@ export function HistoryPage() {
       if (status === "authenticated") {
         setRecords(mergeHistoryRecords(getCachedHistoryRecords(), historyRecords));
         setLoading(false);
-        setMessage("当前登录态已恢复，但后端令牌暂不可用，先展示本地缓存的历史资产。");
+        setMessage("本地缓存");
       } else {
         setRecords(historyRecords);
         setLoading(false);
-        setMessage("当前没有登录令牌，先展示本地演示历史资产。");
+        setMessage("演示数据");
       }
       return;
     }
@@ -75,11 +80,8 @@ export function HistoryPage() {
       <header className="rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-lg shadow-slate-950/6 backdrop-blur">
         <p className="text-xs tracking-[0.3em] text-sky-700 uppercase">History</p>
         <h2 className="mt-3 text-3xl font-semibold text-slate-950">历史生成记录</h2>
-        <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-          这里按时间查看你的历史生成任务、参考海报和当前状态，已经接入后端历史记录接口。
-        </p>
         <p className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-          {message}
+          {message} / {records.length} 条
         </p>
       </header>
 
@@ -93,22 +95,41 @@ export function HistoryPage() {
         <div className="grid gap-4">
           {records.map((record) => {
             const poster = findPoster(posters, record.posterId) ?? findPoster(posterRecords, record.posterId);
+            const cachedDetail = getCachedHistoryRecord(record.id);
+            const thumbnail = cachedDetail?.results[0] ?? null;
+            
+            // If the record succeeded but we don't have the generated image yet (loading from Supabase), don't fallback to poster image.
+            const imageUrl = thumbnail?.imageUrl ?? record.previewImageUrl ?? (record.status === "succeeded" ? "" : poster?.imageUrl) ?? "";
+            const imageAlt = thumbnail?.title ?? record.previewTitle ?? (record.status === "succeeded" ? "AI生成图加载中" : poster?.title) ?? "历史生成图";
+            const displayTitle = thumbnail?.title ?? record.previewTitle ?? (record.status === "succeeded" ? "生成图同步中..." : poster?.title) ?? "未找到参考海报";
+            const displayOutputs = cachedDetail ? cachedDetail.results.length || record.outputs : record.outputs;
 
             return (
               <article
                 key={record.id}
                 className="grid gap-4 rounded-[2rem] border border-white/70 bg-white/90 p-4 shadow-lg shadow-slate-950/5 backdrop-blur md:grid-cols-[220px_1fr]"
               >
-                <div className="overflow-hidden rounded-[1.6rem] bg-slate-950">
-                  <img src={poster?.imageUrl} alt={poster?.title} className="h-full w-full object-cover" />
+                <div className="relative overflow-hidden rounded-[1.6rem] bg-slate-950">
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={imageAlt} className="h-full w-full object-cover" />
+                  ) : record.status === "succeeded" ? (
+                    <div className="flex h-full min-h-[220px] items-center justify-center bg-slate-100">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-sky-500" />
+                        <span className="text-xs font-medium tracking-[0.2em] text-slate-400">SYNCING</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-slate-400">暂无图片</div>
+                  )}
                 </div>
 
                 <div className="flex flex-col justify-between gap-4 p-2">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Generation Record</p>
-                      <h3 className="mt-2 text-2xl font-semibold text-slate-950">{poster?.title ?? "未找到参考海报"}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{record.prompt}</p>
+                      <h3 className="mt-2 text-2xl font-semibold text-slate-950">{displayTitle}</h3>
+                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{record.prompt}</p>
                     </div>
 
                     <div className="flex flex-col items-end gap-3">
@@ -122,11 +143,10 @@ export function HistoryPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-4">
+                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-3">
                     <MetaItem label="模式" value={record.mode === "chat" ? "AI Chat" : "AI Draw"} />
                     <MetaItem label="时间" value={record.createdAt} />
-                    <MetaItem label="输出数" value={`${record.outputs} 张`} />
-                    <MetaItem label="记录编号" value={record.id} />
+                    <MetaItem label="输出数" value={`${displayOutputs} 张`} />
                   </div>
                 </div>
               </article>

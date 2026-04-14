@@ -36,6 +36,8 @@ type GenerationRecordRow = {
   id: string;
   mode: "chat" | "draw";
   output_count: number;
+  preview_image_url?: string | null;
+  preview_title?: string | null;
   prompt_text: string;
   source_origin: string;
   source_poster_id: string | null;
@@ -289,10 +291,26 @@ export function createLocalDatabase(databasePath: string): LocalDatabase {
     const rows = database
       .prepare(
         `
-          SELECT id, user_id, mode, status, source_poster_id, source_origin, prompt_text, error_message, output_count, created_at, updated_at
-          FROM generation_records
-          WHERE user_id = ?
-          ORDER BY created_at DESC
+          SELECT
+            records.id, records.user_id, records.mode, records.status, records.source_poster_id, records.source_origin,
+            records.prompt_text, records.error_message, records.output_count, records.created_at, records.updated_at,
+            (
+              SELECT title
+              FROM generation_outputs
+              WHERE generation_id = records.id
+              ORDER BY output_order ASC
+              LIMIT 1
+            ) AS preview_title,
+            (
+              SELECT COALESCE(thumbnail_url, image_url)
+              FROM generation_outputs
+              WHERE generation_id = records.id
+              ORDER BY output_order ASC
+              LIMIT 1
+            ) AS preview_image_url
+          FROM generation_records AS records
+          WHERE records.user_id = ?
+          ORDER BY records.created_at DESC
         `
       )
       .all(userId) as GenerationRecordRow[];
@@ -511,19 +529,21 @@ export function createLocalDatabase(databasePath: string): LocalDatabase {
   };
 }
 
-function mapGenerationRecord(row: GenerationRecordRow): HistoryRecord {
-  return {
-    createdAt: row.created_at,
-    errorMessage: row.error_message,
-    id: row.id,
-    mode: row.mode,
-    outputs: row.output_count,
-    posterId: row.source_poster_id ?? "",
-    prompt: row.prompt_text,
-    sourceOrigin: row.source_origin,
-    status: normalizeHistoryStatus(row.status)
-  };
-}
+  function mapGenerationRecord(row: GenerationRecordRow): HistoryRecord {
+    return {
+      createdAt: row.created_at,
+      errorMessage: row.error_message,
+      id: row.id,
+      mode: row.mode,
+      outputs: row.output_count,
+      posterId: row.source_poster_id ?? "",
+      previewImageUrl: row.preview_image_url ?? null,
+      previewTitle: row.preview_title ?? null,
+      prompt: row.prompt_text,
+      sourceOrigin: row.source_origin,
+      status: normalizeHistoryStatus(row.status)
+    };
+  }
 
 function mapGenerationDrawInput(row: GenerationDrawInputRow): HistoryDrawInputRecord {
   return {

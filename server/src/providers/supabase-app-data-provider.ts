@@ -10,13 +10,17 @@ import type {
   UserProfileRecord,
   UserSettingsInput,
   UserSettingsRecord,
+  WorkspaceAssetRecordInput,
+  WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
 } from "../domain/app-data";
+import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
 import type { AppDataProvider } from "./app-data-provider";
 
 type CreateSupabaseAppDataProviderInput = {
   fallback: AppDataProvider;
+  imageGeneratorConfig: AicanapiImageGeneratorConfig;
   supabaseServiceRoleKey: string;
   supabaseUrl: string;
 };
@@ -47,6 +51,7 @@ type SupabaseGenerationRecordRow = {
   id: string;
   mode: "chat" | "draw";
   output_count: number;
+  preview_image_url?: string | null;
   prompt_text: string;
   source_origin: string;
   source_poster_id: string | null;
@@ -85,6 +90,7 @@ type SupabaseGenerationOutputRow = {
 
 export function createSupabaseAppDataProvider({
   fallback,
+  imageGeneratorConfig,
   supabaseServiceRoleKey,
   supabaseUrl
 }: CreateSupabaseAppDataProviderInput): AppDataProvider {
@@ -107,17 +113,12 @@ export function createSupabaseAppDataProvider({
         throw new Error("参考海报不存在");
       }
 
-      const posterPool = [
-        poster.data,
-        ...(await fallback.getPosters()).data.filter((entry) => entry.id !== poster.data?.id)
-      ].slice(0, 4);
-
-      const results = buildWorkspaceResults({
+      const generated = await generateWorkspaceImages({
+        config: imageGeneratorConfig,
         generation: input.generation,
-        poster: poster.data,
-        posterPool,
-        userId: input.user.id
+        poster: poster.data
       });
+      const results = generated.results;
 
       const record = await insertGenerationRecord(supabase, {
         mode: input.generation.mode,
@@ -150,12 +151,13 @@ export function createSupabaseAppDataProvider({
         results.map(async (result, index) => {
           const { error } = await supabase.from("generation_outputs").insert({
             generation_id: record.id,
-            height: 1600,
+            height: generated.height,
             image_url: result.imageUrl,
             output_order: index,
             summary: result.summary,
+            thumbnail_url: resolvePreviewThumbnailUrl(result.imageUrl),
             title: result.title,
-            width: 1200
+            width: generated.width
           });
 
           if (error) {
@@ -166,20 +168,19 @@ export function createSupabaseAppDataProvider({
 
       return {
         data: {
-          insight:
-            input.generation.mode === "chat"
-              ? `我把参考海报《${poster.data.title}》的题材气质拆成了新的叙事方向，建议优先强化“${poster.data.attributes.mood}”与“${poster.data.attributes.composition}”。`
-              : `AI Draw 已根据你选中的模块生成首轮占位结果。当前重点保留“${poster.data.attributes.style}”和“${poster.data.attributes.tone}”的视觉语言。`,
+          insight: generated.insight,
           results,
           source: "supabase",
           task: {
             appliedModules: input.generation.selectedModules,
             id: record.id,
+            modelId: input.generation.modelId,
             mode: input.generation.mode,
             moduleWeights: input.generation.moduleWeights,
             posterId: poster.data.id,
             posterTitle: poster.data.title,
             prompt: input.generation.prompt,
+            ratioId: input.generation.ratioId,
             status: "succeeded",
             submittedAt: record.createdAt
           }
@@ -233,8 +234,19 @@ export function createSupabaseAppDataProvider({
         throw error;
       }
 
+      const records = (data ?? []).map((row) => mapGenerationRecord(row as SupabaseGenerationRecordRow));
+      const previews = await getGenerationPreviews(supabase, records.map((record) => record.id));
+
       return {
-        data: (data ?? []).map(mapGenerationRecord),
+        data: records.map((record) => {
+          const preview = previews.get(record.id);
+
+          return {
+            ...record,
+            previewImageUrl: preview?.previewImageUrl ?? record.previewImageUrl ?? null,
+            previewTitle: preview?.previewTitle ?? null
+          };
+        }),
         source: "supabase"
       };
     },
@@ -341,6 +353,37 @@ export function createSupabaseAppDataProvider({
         source: "supabase"
       };
     },
+    async recordWorkspaceAsset(input: { asset: WorkspaceAssetRecordInput; user: AuthenticatedUser }): Promise<ProviderResult<WorkspaceAssetRecordResponse>> {
+      if (input.user.kind === "local") {
+        return fallback.recordWorkspaceAsset(input);
+      }
+
+      await ensureUserProfile(supabase, input.user);
+
+      const poster = await getPosterById(supabase, fallback, input.asset.posterId);
+
+      if (!poster.data) {
+        throw new Error("参考海报不存在");
+      }
+
+      const record = await insertGenerationRecord(supabase, {
+        mode: input.asset.mode,
+        outputCount: 0,
+        posterId: poster.data.id,
+        prompt: input.asset.prompt?.trim() || buildWorkspaceAssetPrompt(input.asset, poster.data),
+        sourceOrigin: input.asset.sourceOrigin ?? input.asset.action,
+        status: "waiting",
+        userId: input.user.id
+      });
+
+      return {
+        data: {
+          record,
+          source: "supabase"
+        },
+        source: "supabase"
+      };
+    },
     async updateUserSettings(input: {
       settings: UserSettingsInput;
       user: AuthenticatedUser;
@@ -395,6 +438,17 @@ export function createSupabaseAppDataProvider({
       };
     }
   };
+}
+
+function buildWorkspaceAssetPrompt(input: WorkspaceAssetRecordInput, poster: PosterRecord) {
+  const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
+  const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
+
+  return `${originText}将《${poster.title}》作为 ${modeLabel} 参考资产加入工作区。`;
+}
+
+function resolvePreviewThumbnailUrl(imageUrl: string) {
+  return imageUrl.startsWith("data:") ? null : imageUrl;
 }
 
 async function ensureUserProfile(supabase: SupabaseClient, user: Extract<AuthenticatedUser, { kind: "supabase" }>) {
@@ -548,6 +602,41 @@ async function getGenerationOutputs(supabase: SupabaseClient, generationId: stri
   return data.map((row) => mapGenerationOutput(row as SupabaseGenerationOutputRow));
 }
 
+async function getGenerationPreviews(supabase: SupabaseClient, generationIds: string[]) {
+  const previews = new Map<string, { previewImageUrl: string | null; previewTitle: string | null }>();
+
+  if (generationIds.length === 0) {
+    return previews;
+  }
+
+  const { data, error } = await supabase
+    .from("generation_outputs")
+    .select("generation_id, thumbnail_url, image_url, title, output_order")
+    .in("generation_id", generationIds)
+    .order("output_order", { ascending: true });
+
+  if (error || !data) {
+    return previews;
+  }
+
+  for (const row of data as Array<{ generation_id: string; image_url: string | null; thumbnail_url: string | null; title: string | null }>) {
+    if (previews.has(row.generation_id)) {
+      continue;
+    }
+
+    const previewUrl = row.thumbnail_url ?? row.image_url;
+
+    if (previewUrl || row.title) {
+      previews.set(row.generation_id, {
+        previewImageUrl: previewUrl,
+        previewTitle: row.title
+      });
+    }
+  }
+
+  return previews;
+}
+
 async function getPosterById(supabase: SupabaseClient, fallback: AppDataProvider, id: string): Promise<ProviderResult<PosterRecord | null>> {
   try {
     const { data } = await supabase
@@ -648,6 +737,7 @@ function mapGenerationRecord(row: SupabaseGenerationRecordRow): HistoryRecord {
     mode: row.mode,
     outputs: row.output_count,
     posterId: row.source_poster_id ?? "",
+    previewImageUrl: row.preview_image_url ?? null,
     prompt: row.prompt_text,
     sourceOrigin: row.source_origin,
     status: normalizeHistoryStatus(row.status)

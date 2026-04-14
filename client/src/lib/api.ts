@@ -4,6 +4,7 @@ import type {
   HistoryRecord,
   HistoryRecordDetail,
   PosterRecord,
+  WorkspaceAssetAction,
   UserSettingsInput,
   UserSettingsRecord,
   WorkspaceGenerationResponse
@@ -54,6 +55,11 @@ type HistoryResponse = {
 
 type HistoryRecordResponse = {
   record: HistoryRecordDetail;
+  source: AppDataSource;
+};
+
+type WorkspaceAssetRecordResponse = {
+  record: HistoryRecord;
   source: AppDataSource;
 };
 
@@ -161,13 +167,31 @@ export const appDataRequest = {
 };
 
 export const workspaceRequest = {
+  async recordAsset(
+    token: string,
+    payload: {
+      action: WorkspaceAssetAction;
+      mode: "chat" | "draw";
+      posterId: string;
+      prompt?: string;
+      sourceOrigin?: string;
+    }
+  ) {
+    return request<WorkspaceAssetRecordResponse>("/workspace/assets", {
+      body: JSON.stringify(payload),
+      method: "POST",
+      token
+    });
+  },
   async generate(
     token: string,
     payload: {
       mode: "chat" | "draw";
+      modelId?: "doubao-seedance-5" | "nano-banana-2";
       moduleWeights: Record<string, number>;
       posterId: string;
       prompt: string;
+      ratioId?: string;
       sourceOrigin?: string;
       selectedModules: string[];
     }

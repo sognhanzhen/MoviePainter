@@ -14,6 +14,13 @@ export function createApp() {
   const database = createLocalDatabase(serverConfig.databasePath);
   const dataProvider = createAppDataProvider({
     database,
+    imageGeneratorConfig: {
+      baseUrl: serverConfig.aicanapiBaseUrl,
+      doubaoApiKey: serverConfig.aicanapiDoubaoApiKey,
+      doubaoImageModel: serverConfig.aicanapiDoubaoImageModel,
+      geminiApiKey: serverConfig.aicanapiGeminiApiKey,
+      geminiImageModel: serverConfig.aicanapiGeminiImageModel
+    },
     supabaseServiceRoleKey: serverConfig.supabaseServiceRoleKey,
     supabaseUrl: serverConfig.supabaseUrl
   });

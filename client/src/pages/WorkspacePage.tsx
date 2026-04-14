@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { PosterDetailModal } from "../components/PosterDetailModal";
 import { PosterMosaicCard } from "../components/PosterMosaicCard";
 import type {
   AppDataSource,
@@ -12,6 +13,7 @@ import type {
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
 import { appDataRequest, workspaceRequest } from "../lib/api";
 import { saveGeneratedHistorySnapshot } from "../lib/history-cache";
+import { recordWorkspaceAssetUse } from "../lib/workspace-assets";
 
 const drawModules = [
   { key: "character", label: "角色" },
@@ -69,7 +71,6 @@ type ChatGenerationRecord = {
   insight: string;
   modelId: string;
   posterTitle: string;
-  progress: number;
   prompt: string;
   ratioId: string;
   referenceImageName: string;
@@ -94,9 +95,7 @@ export function WorkspacePage() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [chatDraft, setChatDraft] = useState(
-    "请为一张近未来女性主角悬疑电影海报设计新的构图、光色与片名字体。"
-  );
+  const [chatDraft, setChatDraft] = useState("");
   const [selectedModelId, setSelectedModelId] = useState<(typeof chatModelOptions)[number]["id"]>(chatModelOptions[0].id);
   const [selectedRatioId, setSelectedRatioId] = useState<(typeof chatRatioOptions)[number]["id"]>(chatRatioOptions[0].id);
   const [chatNotice, setChatNotice] = useState("上传参考图，或者从下方海报墙把模板 prompt 注入当前生成器。");
@@ -111,6 +110,8 @@ export function WorkspacePage() {
   const [drawGenerationState, setDrawGenerationState] = useState<"failed" | "idle" | "submitting" | "succeeded">("idle");
   const [drawGenerationMessage, setDrawGenerationMessage] = useState("先选择参考海报，再从当前模式发起生成。");
   const [latestDrawGeneration, setLatestDrawGeneration] = useState<WorkspaceGenerationResponse | null>(null);
+  const [workspacePosterModal, setWorkspacePosterModal] = useState<PosterRecord | null>(null);
+  const [workspacePosterSelectingMode, setWorkspacePosterSelectingMode] = useState(false);
   const mainComposerRef = useRef<HTMLDivElement | null>(null);
   const { error, loading, posters, source } = usePosterCatalog(token);
   const mode = searchParams.get("mode") === "draw" ? "draw" : "chat";
@@ -119,6 +120,9 @@ export function WorkspacePage() {
   const latestChatRecord = chatGenerationDeck[0] ?? null;
   const activeChatRecord = getActiveChatRecord(chatGenerationDeck, activeChatGenerationId);
   const panelRecord = activeChatRecord ?? latestChatRecord;
+  const floatingPanelRecord = pendingChatRecord ?? panelRecord;
+  const shouldShowFloatingComposer =
+    mode === "chat" && !isGenerationPanelOpen && (hasScrolledPastMainComposer || Boolean(pendingChatRecord));
 
   useEffect(() => {
     if (!token || searchParams.has("mode")) {
@@ -233,29 +237,6 @@ export function WorkspacePage() {
   }, [mode]);
 
   useEffect(() => {
-    if (!pendingChatRecord) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      setChatGenerationDeck((current) =>
-        current.map((record) =>
-          record.id === pendingChatRecord.id
-            ? {
-                ...record,
-                progress: Math.min(record.progress + 6 + Math.round(Math.random() * 7), 88)
-              }
-            : record
-        )
-      );
-    }, 320);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [pendingChatRecord?.id]);
-
-  useEffect(() => {
     if (!isGenerationPanelOpen) {
       return;
     }
@@ -274,11 +255,47 @@ export function WorkspacePage() {
     setSearchParams(nextParams);
   }
 
-  function attachPoster(posterId: string, sourceOrigin = "workspace_inspiration") {
+  function attachPoster(posterId: string, sourceOrigin = "workspace_inspiration", nextMode?: WorkspaceMode) {
     const nextParams = new URLSearchParams(searchParams);
+    if (nextMode) {
+      nextParams.set("mode", nextMode);
+    }
     nextParams.set("posterId", posterId);
     nextParams.set("source", sourceOrigin);
     setSearchParams(nextParams);
+  }
+
+  function openWorkspacePoster(poster: PosterRecord) {
+    setWorkspacePosterModal(poster);
+    setWorkspacePosterSelectingMode(false);
+  }
+
+  async function handleWorkspacePosterUse(nextMode: WorkspaceMode) {
+    if (!workspacePosterModal) {
+      return;
+    }
+
+    if (!workspacePosterSelectingMode) {
+      setWorkspacePosterSelectingMode(true);
+      return;
+    }
+
+    await recordWorkspaceAssetUse({
+      action: "workspace_use",
+      mode: nextMode,
+      poster: workspacePosterModal,
+      sourceOrigin: "workspace_inspiration",
+      token
+    });
+
+    attachPoster(workspacePosterModal.id, "workspace_inspiration", nextMode);
+
+    if (nextMode === "chat") {
+      setChatNotice(`已选中《${workspacePosterModal.title}》，可继续作为当前生成器的参考海报。`);
+    }
+
+    setWorkspacePosterModal(null);
+    setWorkspacePosterSelectingMode(false);
   }
 
   function toggleDrawImportSelection(moduleKey: keyof DrawModuleState) {
@@ -418,7 +435,6 @@ export function WorkspacePage() {
       insight: "正在解析提示词、参考图与镜头语气。",
       modelId: selectedModelId,
       posterTitle: posterForRequest.title,
-      progress: 14,
       prompt,
       ratioId: selectedRatioId,
       referenceImageName: referenceImage?.name ?? "",
@@ -438,9 +454,11 @@ export function WorkspacePage() {
     try {
       const response = await workspaceRequest.generate(token, {
         mode: "chat",
+        modelId: selectedModelId,
         moduleWeights: {},
         posterId: posterForRequest.id,
         prompt,
+        ratioId: selectedRatioId,
         sourceOrigin: searchParams.get("source") ?? "workspace",
         selectedModules: []
       });
@@ -453,7 +471,6 @@ export function WorkspacePage() {
                 createdAt: response.task.submittedAt,
                 insight: response.insight,
                 posterTitle: response.task.posterTitle,
-                progress: 100,
                 results: response.results,
                 source: response.source,
                 status: "succeeded"
@@ -473,7 +490,6 @@ export function WorkspacePage() {
             ? {
                 ...record,
                 insight: message,
-                progress: 0,
                 status: "failed"
               }
             : record
@@ -505,23 +521,25 @@ export function WorkspacePage() {
     }
 
     setDrawGenerationState("submitting");
-    setDrawGenerationMessage("AI Draw 正在根据六模块参数组合生成占位结果...");
+    setDrawGenerationMessage("AI Draw 正在生成 4 张图，等待模型返回。");
 
     try {
       const response = await workspaceRequest.generate(token, {
         mode: "draw",
+        modelId: "nano-banana-2",
         moduleWeights: Object.fromEntries(
           selectedModules.map((moduleKey) => [moduleKey, drawState[moduleKey].weight])
         ),
         posterId: selectedPoster.id,
         prompt: buildDrawPrompt(selectedPoster, drawState),
+        ratioId: resolveRatioOptionId(selectedPoster.attributes.ratio),
         sourceOrigin: searchParams.get("source") ?? "workspace",
         selectedModules
       });
 
       setLatestDrawGeneration(response);
       setDrawGenerationState("succeeded");
-      setDrawGenerationMessage(`AI Draw 已返回 ${response.results.length} 个结果占位。`);
+      setDrawGenerationMessage(`AI Draw 已返回 ${response.results.length} 个真实结果。`);
       saveGeneratedHistorySnapshot(response);
       navigate(`/history/${response.task.id}`);
     } catch (requestError) {
@@ -633,7 +651,7 @@ export function WorkspacePage() {
             <aside className="space-y-4 rounded-[2rem] border border-slate-900/8 bg-white p-5 shadow-sm">
               <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">Current Reference</p>
               {selectedPoster ? (
-                <PosterMosaicCard poster={selectedPoster} onClick={() => undefined} selected showMeta={false} />
+                <PosterMosaicCard poster={selectedPoster} onClick={() => openWorkspacePoster(selectedPoster)} selected showMeta={false} />
               ) : (
                 <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-7 text-slate-500">
                   当前还没有参考海报。你可以从下方灵感区选择一张海报，把它注入当前模式。
@@ -668,9 +686,7 @@ export function WorkspacePage() {
                 <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">Latest Outputs</p>
                 <h3 className="mt-2 text-2xl font-semibold text-slate-950">当前生成结果区</h3>
               </div>
-              <p className="max-w-xl text-sm leading-6 text-slate-600">
-                AI Draw 这部分先保留结果展示和状态链路，今天优先聚焦 AI Chat 生成区的前景面板和小型对话框体验。
-              </p>
+              <p className="max-w-xl text-sm leading-6 text-slate-600">生成完成后会进入历史资产。</p>
             </div>
 
             {drawGenerationState === "idle" ? (
@@ -678,9 +694,12 @@ export function WorkspacePage() {
                 还没有发起生成。你可以在上方 AI Draw 工作区里开始生成，结果会展示在这里。
               </div>
             ) : drawGenerationState === "submitting" ? (
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-[280px] animate-pulse rounded-[1.6rem] border border-white/60 bg-white/80" />
+              <div className="mt-5 grid gap-4 md:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="flex h-[280px] flex-col items-center justify-center rounded-[1.6rem] border border-white/60 bg-white/80">
+                    <GenerationSpinner sizeClassName="h-8 w-8" />
+                    <p className="mt-4 text-sm font-semibold text-slate-700">生成图 {index + 1}</p>
+                  </div>
                 ))}
               </div>
             ) : latestDrawGeneration ? (
@@ -734,13 +753,7 @@ export function WorkspacePage() {
                   poster={poster}
                   selected={selectedPoster?.id === poster.id}
                   showMeta={false}
-                  onClick={() => {
-                    attachPoster(poster.id);
-
-                    if (mode === "chat") {
-                      setChatNotice(`已选中《${poster.title}》，可继续作为当前生成器的参考海报。`);
-                    }
-                  }}
+                  onClick={() => openWorkspacePoster(poster)}
                 />
               ))}
             </div>
@@ -748,21 +761,21 @@ export function WorkspacePage() {
         </div>
       </section>
 
-      {mode === "chat" && !isGenerationPanelOpen && hasScrolledPastMainComposer ? (
+      {shouldShowFloatingComposer ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-3">
           <div className="pointer-events-auto w-full max-w-[760px]">
             <ChatComposer
               attachedTemplateTitle={selectedPoster?.title ?? ""}
               compact
               notice={chatNotice}
-              onOpenPanel={panelRecord ? () => openGenerationPanel(panelRecord.id) : undefined}
+              onOpenPanel={floatingPanelRecord ? () => openGenerationPanel(floatingPanelRecord.id) : undefined}
               onPromptChange={setChatDraft}
               onReferenceImageChange={handleReferenceImageChange}
               onRemoveReferenceImage={() => setReferenceImage(null)}
               onSubmit={submitChatGeneration}
               onSelectModel={setSelectedModelId}
               onSelectRatio={setSelectedRatioId}
-              panelRecord={panelRecord}
+              panelRecord={floatingPanelRecord}
               prompt={chatDraft}
               referenceImage={referenceImage}
               selectedModelId={selectedModelId}
@@ -803,6 +816,18 @@ export function WorkspacePage() {
             variant="panel"
           />
         </GenerationDeckPanel>
+      ) : null}
+
+      {workspacePosterModal ? (
+        <PosterDetailModal
+          poster={workspacePosterModal}
+          selectingMode={workspacePosterSelectingMode}
+          onClose={() => {
+            setWorkspacePosterModal(null);
+            setWorkspacePosterSelectingMode(false);
+          }}
+          onSelectMode={handleWorkspacePosterUse}
+        />
       ) : null}
     </section>
   );
@@ -1148,10 +1173,13 @@ function ChatComposer({
           className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-slate-900/8 px-4 py-3 text-left transition hover:bg-white/30"
         >
           <div className="min-w-0">
-            <p className="text-[11px] tracking-[0.26em] text-slate-400 uppercase">当前生图进度</p>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-950">
-              {panelRecord.status === "submitting" ? `生成中 ${panelRecord.progress}%` : "打开生图面板"}
-            </p>
+            <p className="text-[11px] tracking-[0.26em] text-slate-400 uppercase">当前生图状态</p>
+            <div className="mt-1 flex items-center gap-2">
+              {panelRecord.status === "submitting" ? <GenerationSpinner sizeClassName="h-4 w-4" /> : null}
+              <p className="truncate text-sm font-semibold text-slate-950">
+                {panelRecord.status === "submitting" ? "生成中" : "打开生图面板"}
+              </p>
+            </div>
           </div>
           <DeckStatusPill status={panelRecord.status} />
         </button>
@@ -1365,14 +1393,12 @@ function AmbientTaskRail({
                     <div>
                       <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">生成预览</p>
                       <p className="mt-3 text-sm leading-6 text-slate-300">
-                        {activeRecord.status === "submitting" ? "当前正在生成中，预览图会首先出现在前景面板上方。" : activeRecord.insight}
+                        {activeRecord.status === "submitting" ? "正在生成 4 张图，等待模型返回。" : activeRecord.insight}
                       </p>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#7dd3fc,#fdba74)] transition-[width] duration-300"
-                        style={{ width: `${activeRecord.status === "failed" ? 18 : activeRecord.progress}%` }}
-                      />
+                    <div className="flex items-center gap-3 rounded-[1rem] border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200">
+                      {activeRecord.status === "submitting" ? <GenerationSpinner sizeClassName="h-5 w-5" /> : null}
+                      <span>{activeRecord.status === "submitting" ? "生成中" : statusTextMap[activeRecord.status]}</span>
                     </div>
                   </div>
                 </div>
@@ -1508,6 +1534,18 @@ function StatChip({ label, value }: { label: string; value: string }) {
   );
 }
 
+function GenerationSpinner({
+  sizeClassName = "h-6 w-6",
+  tone = "dark"
+}: {
+  sizeClassName?: string;
+  tone?: "dark" | "light";
+}) {
+  const colorClass = tone === "light" ? "border-white/25 border-t-white" : "border-slate-300 border-t-slate-950";
+
+  return <span aria-hidden="true" className={`inline-block animate-spin rounded-full border-2 ${colorClass} ${sizeClassName}`} />;
+}
+
 function GenerationDeckPanel({
   activeIndex,
   canViewNewer,
@@ -1611,8 +1649,11 @@ function GenerationImageCard({
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="rounded-[1.35rem] bg-slate-950/74 px-6 py-5 text-center backdrop-blur-sm">
-            <p className="text-xs tracking-[0.24em] text-slate-300 uppercase">生成中</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{record.progress}%</p>
+            <div className="flex justify-center">
+              <GenerationSpinner sizeClassName="h-9 w-9" tone="light" />
+            </div>
+            <p className="mt-4 text-xs tracking-[0.24em] text-slate-300 uppercase">生成中</p>
+            <p className="mt-2 text-sm font-semibold text-white">等待模型返回</p>
           </div>
         </div>
       </article>

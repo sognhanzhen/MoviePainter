@@ -5,6 +5,7 @@ import { PosterDetailModal } from "../components/PosterDetailModal";
 import { PosterMosaicCard } from "../components/PosterMosaicCard";
 import type { PosterRecord, WorkspaceMode } from "../data/posters";
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
+import { recordWorkspaceAssetUse } from "../lib/workspace-assets";
 
 export function LibraryPage() {
   const { token } = useAuth();
@@ -24,7 +25,7 @@ export function LibraryPage() {
     setSelectingMode(false);
   }
 
-  function handleUse(mode: WorkspaceMode) {
+  async function handleUse(mode: WorkspaceMode) {
     if (!selectedPoster) {
       return;
     }
@@ -33,6 +34,14 @@ export function LibraryPage() {
       setSelectingMode(true);
       return;
     }
+
+    await recordWorkspaceAssetUse({
+      action: "library_use",
+      mode,
+      poster: selectedPoster,
+      sourceOrigin: "library",
+      token
+    });
 
     navigate(`/workspace?mode=${mode}&posterId=${selectedPoster.id}&source=library`);
   }

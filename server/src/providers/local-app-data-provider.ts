@@ -8,12 +8,20 @@ import type {
   UserProfileRecord,
   UserSettingsInput,
   UserSettingsRecord,
+  WorkspaceAssetRecordInput,
+  WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
 } from "../domain/app-data";
 import type { LocalDatabase } from "../lib/local-database";
+import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
 
-export function createLocalAppDataProvider(database: LocalDatabase) {
+type CreateLocalAppDataProviderInput = {
+  database: LocalDatabase;
+  imageGeneratorConfig: AicanapiImageGeneratorConfig;
+};
+
+export function createLocalAppDataProvider({ database, imageGeneratorConfig }: CreateLocalAppDataProviderInput) {
   return {
     async generateWorkspace(input: { generation: WorkspaceGenerationInput; user: AuthenticatedUser }): Promise<ProviderResult<WorkspaceGenerationResponse>> {
       if (input.user.kind !== "local") {
@@ -26,11 +34,12 @@ export function createLocalAppDataProvider(database: LocalDatabase) {
         throw new Error("参考海报不存在");
       }
 
-      const results = buildWorkspaceResults({
+      const generated = await generateWorkspaceImages({
+        config: imageGeneratorConfig,
         generation: input.generation,
-        poster,
-        userId: input.user.id
+        poster
       });
+      const results = generated.results;
 
       const record = database.createGenerationRecord({
         mode: input.generation.mode,
@@ -60,31 +69,31 @@ export function createLocalAppDataProvider(database: LocalDatabase) {
       results.forEach((result, index) => {
         database.createGenerationOutput({
           generationId: record.id,
-          height: 1600,
+          height: generated.height,
           imageUrl: result.imageUrl,
           outputOrder: index,
           summary: result.summary,
+          thumbnailUrl: resolvePreviewThumbnailUrl(result.imageUrl),
           title: result.title,
-          width: 1200
+          width: generated.width
         });
       });
 
       return {
         data: {
-          insight:
-            input.generation.mode === "chat"
-              ? `我把参考海报《${poster.title}》的题材气质拆成了新的叙事方向，建议优先强化“${poster.attributes.mood}”与“${poster.attributes.composition}”。`
-              : `AI Draw 已根据你选中的模块生成首轮占位结果。当前重点保留“${poster.attributes.style}”和“${poster.attributes.tone}”的视觉语言。`,
+          insight: generated.insight,
           results,
           source: "local-db",
           task: {
             appliedModules: input.generation.selectedModules,
             id: record.id,
+            modelId: input.generation.modelId,
             mode: input.generation.mode,
             moduleWeights: input.generation.moduleWeights,
             posterId: poster.id,
             posterTitle: poster.title,
             prompt: input.generation.prompt,
+            ratioId: input.generation.ratioId,
             status: "succeeded",
             submittedAt: record.createdAt
           }
@@ -171,6 +180,35 @@ export function createLocalAppDataProvider(database: LocalDatabase) {
         source: "local-db"
       };
     },
+    async recordWorkspaceAsset(input: { asset: WorkspaceAssetRecordInput; user: AuthenticatedUser }): Promise<ProviderResult<WorkspaceAssetRecordResponse>> {
+      if (input.user.kind !== "local") {
+        throw new Error("本地兜底链路只支持 local JWT 用户");
+      }
+
+      const poster = demoPosterRecords.find((entry) => entry.id === input.asset.posterId) ?? null;
+
+      if (!poster) {
+        throw new Error("参考海报不存在");
+      }
+
+      const record = database.createGenerationRecord({
+        mode: input.asset.mode,
+        outputCount: 0,
+        posterId: poster.id,
+        prompt: input.asset.prompt?.trim() || buildWorkspaceAssetPrompt(input.asset, poster),
+        sourceOrigin: input.asset.sourceOrigin ?? input.asset.action,
+        status: "waiting",
+        userId: input.user.id
+      });
+
+      return {
+        data: {
+          record,
+          source: "local-db"
+        },
+        source: "local-db"
+      };
+    },
     async updateUserSettings(input: {
       settings: UserSettingsInput;
       user: AuthenticatedUser;
@@ -185,6 +223,17 @@ export function createLocalAppDataProvider(database: LocalDatabase) {
       };
     }
   };
+}
+
+function buildWorkspaceAssetPrompt(input: WorkspaceAssetRecordInput, poster: PosterRecord) {
+  const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
+  const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
+
+  return `${originText}将《${poster.title}》作为 ${modeLabel} 参考资产加入工作区。`;
+}
+
+function resolvePreviewThumbnailUrl(imageUrl: string) {
+  return imageUrl.startsWith("data:") ? null : imageUrl;
 }
 
 function buildWorkspaceResults(input: {

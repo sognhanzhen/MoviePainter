@@ -2,6 +2,8 @@ export type AppDataSource = "local-db" | "local-demo" | "supabase" | "workspace-
 
 export type WorkspaceMode = "chat" | "draw";
 
+export type WorkspaceAssetAction = "library_use" | "workspace_use";
+
 export type HistoryStatus = "failed" | "running" | "succeeded" | "waiting";
 
 export type PosterRecord = {
@@ -32,6 +34,8 @@ export type HistoryRecord = {
   mode: WorkspaceMode;
   outputs: number;
   posterId: string;
+  previewImageUrl?: string | null;
+  previewTitle?: string | null;
   prompt: string;
   sourceOrigin?: string;
   status: HistoryStatus;
@@ -87,11 +91,13 @@ export type UserSettingsInput = {
 export type WorkspaceGenerationTask = {
   appliedModules: string[];
   id: string;
+  modelId?: "doubao-seedance-5" | "nano-banana-2";
   mode: WorkspaceMode;
   moduleWeights: Record<string, number>;
   posterId: string;
   posterTitle: string;
   prompt: string;
+  ratioId?: string;
   status: "succeeded";
   submittedAt: string;
 };

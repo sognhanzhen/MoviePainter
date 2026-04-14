@@ -19,14 +19,15 @@ export function HistoryDetailPage() {
   const { posters } = usePosterCatalog(token);
   const [record, setRecord] = useState<HistoryRecordDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("正在加载这条生成记录详情...");
+  const [message, setMessage] = useState("加载中");
+  const [activeOutput, setActiveOutput] = useState<HistoryOutputRecord | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadRecord() {
       setLoading(true);
-      setMessage("正在加载这条生成记录详情...");
+      setMessage("加载中");
 
       try {
         const response = await appDataRequest.getHistoryRecord(token, historyId);
@@ -36,7 +37,7 @@ export function HistoryDetailPage() {
         }
 
         setRecord(response.record);
-        setMessage(`详情已从 ${response.source} 数据源加载。`);
+        setMessage(`已同步 ${response.source}`);
       } catch (error) {
         if (cancelled) {
           return;
@@ -44,13 +45,7 @@ export function HistoryDetailPage() {
 
         const fallbackRecord = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId));
         setRecord(fallbackRecord);
-        setMessage(
-          fallbackRecord
-            ? error instanceof Error
-              ? `${error.message}，当前先展示本地缓存或演示详情。`
-              : "详情加载失败，当前先展示本地缓存或演示详情。"
-            : "没有找到这条历史记录。"
-        );
+        setMessage(fallbackRecord ? "显示缓存" : error instanceof Error ? error.message : "未找到记录");
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -61,7 +56,7 @@ export function HistoryDetailPage() {
     if (!historyId) {
       setRecord(null);
       setLoading(false);
-      setMessage("缺少历史记录编号。");
+      setMessage("缺少记录编号");
       return;
     }
 
@@ -69,13 +64,7 @@ export function HistoryDetailPage() {
       const fallbackRecord = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId));
       setRecord(fallbackRecord);
       setLoading(false);
-      setMessage(
-        fallbackRecord
-          ? status === "authenticated"
-            ? "当前登录态已恢复，但后端令牌暂不可用，先展示本地缓存或演示详情。"
-            : "当前先展示本地缓存或演示详情。"
-          : "没有找到这条历史记录。"
-      );
+      setMessage(fallbackRecord ? (status === "authenticated" ? "显示缓存" : "演示数据") : "未找到记录");
       return;
     }
 
@@ -97,12 +86,11 @@ export function HistoryDetailPage() {
       return record.outputsDetail;
     }
 
-    if (!cachedDetail) {
-      return [];
-    }
-
-    return cachedDetail.results.map((result, index) => mapCachedResultToOutput(result, index));
+    return cachedDetail ? cachedDetail.results.map((result, index) => mapCachedResultToOutput(result, index)) : [];
   }, [cachedDetail, record]);
+  const primaryOutput = outputs[0] ?? null;
+  const heroImageUrl = primaryOutput?.imageUrl ?? poster?.imageUrl ?? "";
+  const heroTitle = primaryOutput?.title ?? poster?.title ?? "生成结果";
 
   if (loading) {
     return (
@@ -118,7 +106,7 @@ export function HistoryDetailPage() {
       <section className="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-lg shadow-slate-950/6 backdrop-blur">
         <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">History Detail</p>
         <h2 className="mt-3 text-3xl font-semibold text-slate-950">未找到历史记录</h2>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">{message}</p>
+        <p className="mt-4 text-sm leading-6 text-slate-600">{message}</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             to="/history"
@@ -143,10 +131,8 @@ export function HistoryDetailPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs tracking-[0.3em] text-sky-700 uppercase">History Detail</p>
-            <h2 className="mt-3 text-3xl font-semibold text-slate-950">历史生成记录详情</h2>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-              查看本次生成的参考海报、提示词、模式和输出状态，并可以快速回到对应工作区继续创作。
-            </p>
+            <h2 className="mt-3 text-3xl font-semibold text-slate-950">历史记录详情</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{message}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -165,60 +151,45 @@ export function HistoryDetailPage() {
             </Link>
           </div>
         </div>
-
-        <p className="mt-5 rounded-[1.25rem] border border-slate-900/8 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-          {message}
-        </p>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/92 shadow-lg shadow-slate-950/5 backdrop-blur">
-          <div className="bg-slate-950">
-            {poster ? (
-              <img src={poster.imageUrl} alt={poster.title} className="h-[420px] w-full object-cover" />
+          <button
+            className="block w-full bg-slate-950 text-left"
+            disabled={!primaryOutput}
+            onClick={() => primaryOutput && setActiveOutput(primaryOutput)}
+            type="button"
+          >
+            {heroImageUrl ? (
+              <img src={heroImageUrl} alt={heroTitle} className="h-[520px] w-full object-cover" />
             ) : (
-              <div className="flex h-[420px] items-center justify-center text-sm text-slate-400">未找到参考海报</div>
+              <div className="flex h-[520px] items-center justify-center text-sm text-slate-400">暂无图片</div>
             )}
-          </div>
+          </button>
 
           <div className="space-y-5 p-6">
             <div>
-              <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Reference Poster</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-950">{poster?.title ?? "未知海报"}</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{poster?.summary ?? "当前记录没有找到对应海报摘要。"}</p>
+              <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">
+                {primaryOutput ? "Generated Output" : "Reference Poster"}
+              </p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-950">{heroTitle}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{poster?.title ? `参考：${poster.title}` : "暂无参考海报"}</p>
             </div>
 
-            {poster ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <MetaCard label="年份" value={poster.year} />
-                <MetaCard label="类型" value={poster.genre} />
-                <MetaCard label="地区" value={poster.region} />
-                <MetaCard label="比例" value={poster.attributes.ratio} />
-              </div>
-            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <MetaCard label="模式" value={record.mode === "chat" ? "AI Chat" : "AI Draw"} />
+              <MetaCard label="输出" value={`${outputs.length || record.outputs} 张`} />
+              <MetaCard label="时间" value={record.createdAt} />
+              <MetaCard label="来源" value={record.sourceOrigin ?? "workspace"} />
+            </div>
           </div>
         </section>
 
         <section className="space-y-6">
           <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
-            <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Generation Snapshot</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <MetaCard label="记录编号" value={record.id} />
-              <MetaCard label="生成模式" value={record.mode === "chat" ? "AI Chat" : "AI Draw"} />
-              <MetaCard label="创建时间" value={record.createdAt} />
-              <MetaCard label="输出数量" value={`${record.outputs} 张`} />
-            </div>
-
-            {record.sourceOrigin ? (
-              <div className="mt-3">
-                <MetaCard label="来源" value={record.sourceOrigin} />
-              </div>
-            ) : null}
-
-            <div className="mt-5 rounded-[1.5rem] border border-slate-900/8 bg-slate-50 p-5">
-              <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">Prompt</p>
-              <p className="mt-3 text-sm leading-7 text-slate-700">{record.prompt}</p>
-            </div>
+            <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Prompt</p>
+            <p className="mt-3 text-sm leading-7 text-slate-700">{record.prompt}</p>
 
             {record.errorMessage ? (
               <div className="mt-5 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
@@ -229,84 +200,56 @@ export function HistoryDetailPage() {
           </article>
 
           <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
-            <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Outputs</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-950">历史资产输出</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              这里展示这次生成沉淀下来的历史资产结果；如果后端结果还没返回，会优先用工作区刚生成的本地缓存做兜底展示。
-            </p>
-
-            {cachedDetail && record.outputsDetail.length === 0 ? (
-              <p className="mt-3 text-sm leading-6 text-sky-700">{cachedDetail.insight}</p>
-            ) : null}
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Outputs</p>
+                <h3 className="mt-3 text-2xl font-semibold text-slate-950">生成结果</h3>
+              </div>
+              <p className="text-sm text-slate-500">点击图片查看大图</p>
+            </div>
 
             {outputs.length > 0 ? (
               <div className="mt-5 grid gap-4 md:grid-cols-2">
-                {outputs.map((output) => (
-                  <article key={output.id} className="overflow-hidden rounded-[1.35rem] border border-slate-900/8 bg-slate-50">
-                    <img src={output.imageUrl} alt={output.title ?? "历史资产输出"} className="h-44 w-full object-cover" />
+                {outputs.map((output, index) => (
+                  <button
+                    key={output.id}
+                    className="overflow-hidden rounded-[1.35rem] border border-slate-900/8 bg-slate-50 text-left transition hover:-translate-y-0.5 hover:border-sky-300"
+                    onClick={() => setActiveOutput(output)}
+                    type="button"
+                  >
+                    <img src={output.imageUrl} alt={output.title ?? "历史资产输出"} className="h-56 w-full object-cover" />
                     <div className="p-4">
-                      <p className="text-sm font-semibold text-slate-950">{output.title ?? `输出 ${output.outputOrder + 1}`}</p>
-                      {output.summary ? <p className="mt-2 text-sm leading-6 text-slate-600">{output.summary}</p> : null}
+                      <p className="text-sm font-semibold text-slate-950">{output.title ?? `生成图 ${index + 1}`}</p>
                     </div>
-                  </article>
+                  </button>
                 ))}
               </div>
             ) : (
               <div className="mt-5 rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-7 text-slate-500">
-                当前还没有可展示的历史输出结果。
-              </div>
-            )}
-          </article>
-
-          {record.drawInputs ? (
-            <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
-              <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Draw Inputs</p>
-              <h3 className="mt-3 text-2xl font-semibold text-slate-950">AI Draw 参数快照</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                这部分是当时落库的模块参数，方便用户回到工作区继续编辑。
-              </p>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <AttributeCard label="角色" value={record.drawInputs.characterValue ?? "未记录"} />
-                <AttributeCard label="风格" value={record.drawInputs.styleValue ?? "未记录"} />
-                <AttributeCard label="氛围" value={record.drawInputs.moodValue ?? "未记录"} />
-                <AttributeCard label="色调" value={record.drawInputs.toneValue ?? "未记录"} />
-                <AttributeCard label="构图" value={record.drawInputs.compositionValue ?? "未记录"} />
-                <AttributeCard label="比例" value={record.drawInputs.aspectRatioValue ?? "未记录"} />
-              </div>
-
-              {record.drawInputs.selectedModules.length > 0 ? (
-                <p className="mt-4 text-sm leading-6 text-slate-600">
-                  已启用模块：{record.drawInputs.selectedModules.join("、")}
-                </p>
-              ) : null}
-            </article>
-          ) : null}
-
-          <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
-            <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Poster Attributes</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-950">参考海报参数</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              这部分参数将用于帮助用户理解该条历史记录当时所依赖的视觉参考，也可以作为重新进入工作区时的复用依据。
-            </p>
-
-            {poster ? (
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <AttributeCard label="角色" value={poster.attributes.character} />
-                <AttributeCard label="风格" value={poster.attributes.style} />
-                <AttributeCard label="氛围" value={poster.attributes.mood} />
-                <AttributeCard label="色调" value={poster.attributes.tone} />
-                <AttributeCard label="构图" value={poster.attributes.composition} />
-                <AttributeCard label="比例" value={poster.attributes.ratio} />
-              </div>
-            ) : (
-              <div className="mt-5 rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-7 text-slate-500">
-                当前记录没有对应的海报参数可以展示。
+                当前还没有可展示的输出结果。
               </div>
             )}
           </article>
         </section>
       </div>
+
+      {activeOutput ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4"
+          onClick={() => setActiveOutput(null)}
+          role="presentation"
+        >
+          <div className="w-full max-w-6xl" onClick={(event) => event.stopPropagation()} role="presentation">
+            <div className="mb-3 flex items-center justify-between gap-3 text-white">
+              <p className="text-sm font-semibold">{activeOutput.title ?? "生成图"}</p>
+              <button className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => setActiveOutput(null)} type="button">
+                关闭
+              </button>
+            </div>
+            <img src={activeOutput.imageUrl} alt={activeOutput.title ?? "生成大图"} className="max-h-[82vh] w-full rounded-[1rem] object-contain" />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -347,15 +290,6 @@ function mapCachedResultToOutput(result: { id: string; imageUrl: string; summary
     summary: result.summary,
     title: result.title
   };
-}
-
-function AttributeCard({ label, value }: { label: string; value: string }) {
-  return (
-    <article className="rounded-[1.4rem] border border-slate-900/8 bg-slate-50 p-4">
-      <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">{label}</p>
-      <p className="mt-3 text-sm leading-6 text-slate-800">{value}</p>
-    </article>
-  );
 }
 
 function MetaCard({ label, value }: { label: string; value: string }) {

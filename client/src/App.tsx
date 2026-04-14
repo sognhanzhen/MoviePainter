@@ -3,7 +3,6 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicOnlyRoute } from "./components/PublicOnlyRoute";
-import { AdminPage } from "./pages/AdminPage";
 import { AuthPage } from "./pages/AuthPage";
 import { HistoryDetailPage } from "./pages/HistoryDetailPage";
 import { HistoryPage } from "./pages/HistoryPage";
@@ -30,7 +29,7 @@ export default function App() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/history/:historyId" element={<HistoryDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin" element={<Navigate replace to="/workspace?mode=chat" />} />
           </Route>
         </Route>
 

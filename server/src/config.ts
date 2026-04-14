@@ -20,6 +20,11 @@ function resolveDatabasePath(databasePath?: string) {
 }
 
 export const serverConfig = {
+  aicanapiBaseUrl: process.env.AICANAPI_BASE_URL ?? "",
+  aicanapiDoubaoApiKey: process.env.AICANAPI_DOUBAO_API_KEY ?? "",
+  aicanapiDoubaoImageModel: process.env.AICANAPI_DOUBAO_IMAGE_MODEL ?? "",
+  aicanapiGeminiApiKey: process.env.AICANAPI_GEMINI_API_KEY ?? "",
+  aicanapiGeminiImageModel: process.env.AICANAPI_GEMINI_IMAGE_MODEL ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   databasePath: resolveDatabasePath(process.env.DATABASE_PATH),
   jwtSecret: process.env.JWT_SECRET ?? "dev-secret-change-me",
