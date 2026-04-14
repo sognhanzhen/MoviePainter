@@ -1,0 +1,156 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+:root {
+  color: #0f172a;
+  background: #f8f6f1;
+  --font-editorial: "Cormorant Garamond", "Songti SC", "Noto Serif SC", serif;
+  --font-ui: "Manrope", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f8f6f1;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.auth-stage__veil {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.auth-stage__veil--top,
+.auth-stage__veil--bottom {
+  left: 0;
+  right: 0;
+  height: 18vh;
+}
+
+.auth-stage__veil--left,
+.auth-stage__veil--right {
+  top: 0;
+  bottom: 0;
+  width: 12vw;
+  min-width: 2.5rem;
+}
+
+.auth-stage__veil--top {
+  top: 0;
+  background:
+    linear-gradient(180deg, rgba(3, 5, 10, 0.98) 0%, rgba(3, 5, 10, 0.72) 38%, rgba(3, 5, 10, 0) 100%);
+  backdrop-filter: blur(22px);
+}
+
+.auth-stage__veil--bottom {
+  bottom: 0;
+  background:
+    linear-gradient(0deg, rgba(3, 5, 10, 0.98) 0%, rgba(3, 5, 10, 0.72) 38%, rgba(3, 5, 10, 0) 100%);
+  backdrop-filter: blur(22px);
+}
+
+.auth-stage__veil--left {
+  left: 0;
+  background:
+    linear-gradient(90deg, rgba(3, 5, 10, 0.99) 0%, rgba(3, 5, 10, 0.78) 40%, rgba(3, 5, 10, 0) 100%);
+  backdrop-filter: blur(22px);
+}
+
+.auth-stage__veil--right {
+  right: 0;
+  background:
+    linear-gradient(270deg, rgba(3, 5, 10, 0.99) 0%, rgba(3, 5, 10, 0.78) 40%, rgba(3, 5, 10, 0) 100%);
+  backdrop-filter: blur(22px);
+}
+
+.auth-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05)),
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 34%),
+    rgba(9, 11, 20, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+
+.auth-panel::before,
+.auth-panel::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+.auth-panel::before {
+  inset: auto auto 72% 68%;
+  width: 9rem;
+  height: 9rem;
+  background: radial-gradient(circle, rgba(255, 216, 162, 0.42), rgba(255, 216, 162, 0) 68%);
+}
+
+.auth-panel::after {
+  inset: 78% 70% auto auto;
+  width: 7rem;
+  height: 7rem;
+  background: radial-gradient(circle, rgba(230, 82, 126, 0.22), rgba(230, 82, 126, 0) 68%);
+}
+
+.auth-poster-card {
+  border-radius: 2rem;
+}
+
+.auth-poster-column {
+  will-change: transform;
+  animation: auth-poster-rise 32s linear infinite;
+}
+
+@keyframes auth-poster-rise {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(0, -50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .auth-poster-column {
+    animation: none;
+  }
+}

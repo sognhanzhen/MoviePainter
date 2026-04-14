@@ -1,0 +1,32 @@
+{
+  "name": "server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "COPYFILE_DISABLE=1 tsx watch --ignore ../.next src/dev.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck",
+    "start": "COPYFILE_DISABLE=1 tsx src/index.ts",
+    "db:init": "node scripts/init-db.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/node": "^4.2.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.5.2",
+    "esbuild": "^0.27.7",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
