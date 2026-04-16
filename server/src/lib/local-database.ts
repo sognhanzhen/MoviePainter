@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import type {
   AuthenticatedUser,
@@ -11,6 +12,8 @@ import type {
   UserSettingsInput,
   UserSettingsRecord
 } from "../domain/app-data.js";
+
+const require = createRequire(import.meta.url);
 
 type UserRow = {
   created_at: string;
@@ -139,7 +142,6 @@ export function createLocalDatabase(databasePath: string): LocalDatabase {
 
   let database: DatabaseSync;
   try {
-    // Dynamic require so older Vercel Node runtimes don't crash the entire function loading
     const sqlite = require("node:sqlite");
     database = new sqlite.DatabaseSync(databasePath);
   } catch (err) {
