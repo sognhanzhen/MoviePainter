@@ -26,25 +26,25 @@ const drawModules = [
 
 const chatModelOptions = [
   {
-    description: "高质量电影海报生成，适合复杂人物、光效和叙事场景。",
+    description: "High-quality poster generation for characters, lighting, and cinematic scenes.",
     id: "doubao-seedance-5",
-    label: "豆包 seedance 5.0"
+    label: "Doubao Seedance 5.0"
   },
   {
-    description: "更轻更快，适合快速尝试构图和风格方向。",
+    description: "Faster draft exploration for composition and style direction.",
     id: "nano-banana-2",
-    label: "nano banana 2"
+    label: "Nano Banana 2"
   }
 ] as const;
 
 const chatRatioOptions = [
   {
-    description: "适合横向电影主视觉和宽画幅场景。",
+    description: "Wide cinematic key art and landscape frames.",
     id: "16:9",
     label: "16:9"
   },
   {
-    description: "适合竖版封面和移动端展示。",
+    description: "Vertical covers and mobile-first poster layouts.",
     id: "9:16",
     label: "9:16"
   }
@@ -104,6 +104,9 @@ export function WorkspacePage() {
   const [activeChatGenerationId, setActiveChatGenerationId] = useState("");
   const [isGenerationPanelOpen, setIsGenerationPanelOpen] = useState(false);
   const [hasScrolledPastMainComposer, setHasScrolledPastMainComposer] = useState(false);
+  const [isFloatingComposerExpanded, setIsFloatingComposerExpanded] = useState(false);
+  const [isFloatingComposerMounted, setIsFloatingComposerMounted] = useState(false);
+  const [isFloatingComposerClosing, setIsFloatingComposerClosing] = useState(false);
   const [isMainComposerVisible, setIsMainComposerVisible] = useState(true);
   const [drawState, setDrawState] = useState<DrawModuleState>(initialDrawState);
   const [drawMessage, setDrawMessage] = useState("选择一个或多个模块后，AI 会根据当前参考海报识别参数并灌入。");
@@ -113,6 +116,7 @@ export function WorkspacePage() {
   const [workspacePosterModal, setWorkspacePosterModal] = useState<PosterRecord | null>(null);
   const [workspacePosterSelectingMode, setWorkspacePosterSelectingMode] = useState(false);
   const mainComposerRef = useRef<HTMLDivElement | null>(null);
+  const floatingComposerRef = useRef<HTMLDivElement | null>(null);
   const { error, loading, posters, source } = usePosterCatalog(token);
   const mode = searchParams.get("mode") === "draw" ? "draw" : "chat";
   const selectedPoster = posters.find((poster) => poster.id === searchParams.get("posterId")) ?? null;
@@ -120,9 +124,11 @@ export function WorkspacePage() {
   const latestChatRecord = chatGenerationDeck[0] ?? null;
   const activeChatRecord = getActiveChatRecord(chatGenerationDeck, activeChatGenerationId);
   const panelRecord = activeChatRecord ?? latestChatRecord;
-  const floatingPanelRecord = pendingChatRecord ?? panelRecord;
-  const shouldShowFloatingComposer =
-    mode === "chat" && !isGenerationPanelOpen && (hasScrolledPastMainComposer || Boolean(pendingChatRecord));
+  const shouldShowFloatingComposer = mode === "chat" && !isGenerationPanelOpen && hasScrolledPastMainComposer;
+  const shouldRenderFloatingComposer = shouldShowFloatingComposer || isFloatingComposerMounted;
+  const floatingComposerPreviewText =
+    chatDraft.trim() ||
+    (selectedPoster ? `Continue from ${selectedPoster.title}` : "Describe the movie poster you want to create.");
 
   useEffect(() => {
     if (!token || searchParams.has("mode")) {
@@ -190,6 +196,7 @@ export function WorkspacePage() {
     if (mode !== "chat") {
       setIsGenerationPanelOpen(false);
       setHasScrolledPastMainComposer(false);
+      setIsFloatingComposerExpanded(false);
       setIsMainComposerVisible(true);
       return;
     }
@@ -205,10 +212,9 @@ export function WorkspacePage() {
         return;
       }
 
-      const headerHeight = getShellHeaderHeight();
       const rect = node.getBoundingClientRect();
-      const isVisible = rect.top < window.innerHeight && rect.bottom > headerHeight + 8;
-      const isPastComposer = rect.bottom <= headerHeight + 8;
+      const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+      const isPastComposer = rect.bottom <= 0;
 
       setIsMainComposerVisible(isVisible);
       setHasScrolledPastMainComposer(isPastComposer);
@@ -235,6 +241,91 @@ export function WorkspacePage() {
       window.removeEventListener("resize", scheduleVisibilityUpdate);
     };
   }, [mode]);
+
+  useEffect(() => {
+    if (shouldShowFloatingComposer) {
+      setIsFloatingComposerMounted(true);
+      setIsFloatingComposerClosing(false);
+      return;
+    }
+
+    setIsFloatingComposerExpanded(false);
+
+    if (!isFloatingComposerMounted) {
+      return;
+    }
+
+    setIsFloatingComposerClosing(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setIsFloatingComposerMounted(false);
+      setIsFloatingComposerClosing(false);
+    }, 240);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isFloatingComposerMounted, shouldShowFloatingComposer]);
+
+  useEffect(() => {
+    if (!shouldRenderFloatingComposer) {
+      setIsFloatingComposerExpanded(false);
+    }
+  }, [shouldRenderFloatingComposer]);
+
+  useEffect(() => {
+    if (!isFloatingComposerExpanded || !shouldShowFloatingComposer) {
+      return;
+    }
+
+    let previousScrollY = window.scrollY;
+    let frameId = 0;
+
+    function handleScroll() {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+
+        const nextScrollY = window.scrollY;
+
+        if (Math.abs(nextScrollY - previousScrollY) > 4) {
+          setIsFloatingComposerExpanded(false);
+          return;
+        }
+
+        previousScrollY = nextScrollY;
+      });
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!floatingComposerRef.current?.contains(event.target as Node)) {
+        setIsFloatingComposerExpanded(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsFloatingComposerExpanded(false);
+      }
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isFloatingComposerExpanded, shouldRenderFloatingComposer]);
 
   useEffect(() => {
     if (!isGenerationPanelOpen) {
@@ -590,49 +681,45 @@ export function WorkspacePage() {
   const canViewOlder = activeIndex >= 0 && activeIndex < chatGenerationDeck.length - 1 && panelRecord?.status !== "submitting";
 
   return (
-    <section className="space-y-8">
-      <section className="px-5 pt-8 sm:px-8 sm:pt-10">
-        <div className="relative mx-auto max-w-[1260px]">
-          <div className="flex justify-center">
-            <ModeTitlePicker mode={mode} onSelect={updateMode} />
-          </div>
+    <section className="space-y-16">
+      <header className="mx-auto max-w-4xl text-center">
+        <ModeTitlePicker mode={mode} onSelect={updateMode} />
+      </header>
 
-          {error ? (
-            <p className="mx-auto mt-6 max-w-[1080px] rounded-[1.2rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-              {error}
-            </p>
-          ) : null}
+      {error ? (
+        <p className="mx-auto max-w-4xl rounded-lg border border-[#ffb4aa]/28 bg-[#311615]/72 px-4 py-3 text-sm leading-6 text-[#ffdad5] shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+          {error}
+        </p>
+      ) : null}
 
-          {mode === "chat" ? (
-            <div ref={mainComposerRef} className="mx-auto mt-6 max-w-[1240px]">
-              <ChatComposer
-                attachedTemplateTitle={selectedPoster?.title ?? ""}
-                notice={chatNotice}
-                onPromptChange={setChatDraft}
-                onReferenceImageChange={handleReferenceImageChange}
-                onRemoveReferenceImage={() => setReferenceImage(null)}
-                onSubmit={submitChatGeneration}
-                onSelectModel={setSelectedModelId}
-                onSelectRatio={setSelectedRatioId}
-                prompt={chatDraft}
-                referenceImage={referenceImage}
-                selectedModelId={selectedModelId}
-                selectedRatioId={selectedRatioId}
-                submitLabel={pendingChatRecord ? "生成中..." : "开始生图"}
-                uploadInputId="workspace-chat-main-upload"
-                variant="main"
-              />
-            </div>
-          ) : null}
-        </div>
-      </section>
+      {mode === "chat" ? (
+        <section ref={mainComposerRef} className="mx-auto max-w-4xl">
+          <ChatComposer
+            attachedTemplateTitle={selectedPoster?.title ?? ""}
+            notice={chatNotice}
+            onPromptChange={setChatDraft}
+            onReferenceImageChange={handleReferenceImageChange}
+            onRemoveReferenceImage={() => setReferenceImage(null)}
+            onSubmit={submitChatGeneration}
+            onSelectModel={setSelectedModelId}
+            onSelectRatio={setSelectedRatioId}
+            prompt={chatDraft}
+            referenceImage={referenceImage}
+            selectedModelId={selectedModelId}
+            selectedRatioId={selectedRatioId}
+            submitLabel={pendingChatRecord ? "生成中..." : "开始生图"}
+            uploadInputId="workspace-chat-main-upload"
+            variant="main"
+          />
+        </section>
+      ) : null}
 
       {mode === "draw" ? (
-        <section className="rounded-[2.6rem] border border-slate-900/8 bg-white/90 p-6 shadow-[0_26px_90px_rgba(15,23,42,0.08)] sm:p-8">
+        <section className="rounded-lg border border-white/6 bg-[#181918]/68 p-6 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.62)] backdrop-blur-2xl sm:p-8">
           <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="rounded-[2rem] border border-slate-900/8 bg-slate-50 p-5">
+            <div className="rounded-lg border border-white/6 bg-[#0f1110]/72 p-5">
               {loading ? (
-                <div className="min-h-[420px] animate-pulse rounded-[1.6rem] bg-white/70" />
+                <div className="min-h-[420px] animate-pulse rounded-lg bg-white/8" />
               ) : (
                 <DrawWorkspace
                   applyReferenceToDrawModules={applyReferenceToDrawModules}
@@ -648,57 +735,57 @@ export function WorkspacePage() {
               )}
             </div>
 
-            <aside className="space-y-4 rounded-[2rem] border border-slate-900/8 bg-white p-5 shadow-sm">
-              <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">Current Reference</p>
+            <aside className="space-y-4 rounded-lg border border-white/6 bg-[#111211]/76 p-5 shadow-sm">
+              <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">Current Reference</p>
               {selectedPoster ? (
                 <PosterMosaicCard poster={selectedPoster} onClick={() => openWorkspacePoster(selectedPoster)} selected showMeta={false} />
               ) : (
-                <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-7 text-slate-500">
+                <div className="rounded-lg border border-dashed border-white/12 bg-white/5 p-6 text-sm leading-7 text-neutral-400">
                   当前还没有参考海报。你可以从下方灵感区选择一张海报，把它注入当前模式。
                 </div>
               )}
 
-              <div className="rounded-[1.5rem] border border-slate-900/8 bg-slate-50 p-4">
+              <div className="rounded-lg border border-white/6 bg-white/5 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">Generation State</p>
-                    <h3 className="mt-2 text-lg font-semibold text-slate-950">AI Draw 生成链路</h3>
+                    <p className="text-xs tracking-[0.24em] text-neutral-500 uppercase">Generation State</p>
+                    <h3 className="mt-2 text-lg font-semibold text-white">AI Draw 生成链路</h3>
                   </div>
                   <GenerationStateBadge state={drawGenerationState} />
                 </div>
 
-                <p className="mt-4 text-sm leading-6 text-slate-600">{drawGenerationMessage}</p>
+                <p className="mt-4 text-sm leading-6 text-neutral-400">{drawGenerationMessage}</p>
 
                 {latestDrawGeneration ? (
-                  <div className="mt-4 rounded-[1.25rem] border border-slate-900/8 bg-white p-4">
-                    <p className="text-xs tracking-[0.22em] text-sky-700 uppercase">Latest Task</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950">{latestDrawGeneration.task.posterTitle}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{latestDrawGeneration.insight}</p>
+                  <div className="mt-4 rounded-lg border border-white/6 bg-[#0d0e0d] p-4">
+                    <p className="text-xs tracking-[0.22em] text-[#ffb4aa] uppercase">Latest Task</p>
+                    <p className="mt-2 text-sm font-semibold text-white">{latestDrawGeneration.task.posterTitle}</p>
+                    <p className="mt-2 text-sm leading-6 text-neutral-400">{latestDrawGeneration.insight}</p>
                   </div>
                 ) : null}
               </div>
             </aside>
           </div>
 
-          <section className="mt-6 rounded-[2rem] border border-slate-900/8 bg-slate-50 p-5">
+          <section className="mt-6 rounded-lg border border-white/6 bg-[#0f1110]/72 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">Latest Outputs</p>
-                <h3 className="mt-2 text-2xl font-semibold text-slate-950">当前生成结果区</h3>
+                <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">Latest Outputs</p>
+                <h3 className="mt-2 text-2xl font-semibold text-white">当前生成结果区</h3>
               </div>
-              <p className="max-w-xl text-sm leading-6 text-slate-600">生成完成后会进入历史资产。</p>
+              <p className="max-w-xl text-sm leading-6 text-neutral-500">生成完成后会进入历史资产。</p>
             </div>
 
             {drawGenerationState === "idle" ? (
-              <div className="mt-5 rounded-[1.6rem] border border-dashed border-slate-300 bg-white p-6 text-sm leading-7 text-slate-500">
+              <div className="mt-5 rounded-lg border border-dashed border-white/12 bg-white/5 p-6 text-sm leading-7 text-neutral-400">
                 还没有发起生成。你可以在上方 AI Draw 工作区里开始生成，结果会展示在这里。
               </div>
             ) : drawGenerationState === "submitting" ? (
               <div className="mt-5 grid gap-4 md:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="flex h-[280px] flex-col items-center justify-center rounded-[1.6rem] border border-white/60 bg-white/80">
+                  <div key={index} className="flex h-[280px] flex-col items-center justify-center rounded-lg border border-white/8 bg-white/6">
                     <GenerationSpinner sizeClassName="h-8 w-8" />
-                    <p className="mt-4 text-sm font-semibold text-slate-700">生成图 {index + 1}</p>
+                    <p className="mt-4 text-sm font-semibold text-neutral-300">生成图 {index + 1}</p>
                   </div>
                 ))}
               </div>
@@ -707,7 +794,7 @@ export function WorkspacePage() {
                 {latestDrawGeneration.results.map((result) => (
                   <article
                     key={result.id}
-                    className="overflow-hidden rounded-[1.7rem] border border-white/70 bg-white shadow-lg shadow-slate-950/6"
+                    className="overflow-hidden rounded-lg border border-white/8 bg-[#181918] shadow-lg shadow-black/20"
                   >
                     <div className="relative h-[260px]">
                       <img src={result.imageUrl} alt={result.title} className="h-full w-full object-cover" />
@@ -718,13 +805,13 @@ export function WorkspacePage() {
                       </div>
                     </div>
                     <div className="p-4">
-                      <p className="text-sm leading-6 text-slate-600">{result.summary}</p>
+                      <p className="text-sm leading-6 text-neutral-400">{result.summary}</p>
                     </div>
                   </article>
                 ))}
               </div>
             ) : (
-              <div className="mt-5 rounded-[1.6rem] border border-rose-200 bg-rose-50 p-6 text-sm leading-7 text-rose-900">
+              <div className="mt-5 rounded-lg border border-[#ffb4aa]/24 bg-[#311615]/72 p-6 text-sm leading-7 text-[#ffdad5]">
                 当前生成没有返回结果。你可以调整参数后再试一次。
               </div>
             )}
@@ -732,21 +819,35 @@ export function WorkspacePage() {
         </section>
       ) : null}
 
-      <section className="px-5 pb-4 sm:px-8">
-        <div className="mx-auto max-w-[1260px]">
-          <h3 className="text-xl font-semibold text-slate-950">灵感</h3>
+      <section>
+        <div>
+          <div className="mb-8 flex items-end justify-between gap-6">
+            <div className="text-left">
+              <h3 className="font-[var(--font-ui)] text-2xl font-extrabold tracking-normal text-white">
+                Recent Interpretations
+              </h3>
+              <div className="mt-3 h-[2px] w-12 bg-gradient-to-r from-[#ffb4aa] to-[#e50914]" />
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/library")}
+              className="cursor-pointer pb-1 font-[var(--font-ui)] text-[10px] font-extrabold tracking-[0.24em] text-neutral-500 uppercase transition hover:text-[#ffb4aa]"
+            >
+              View All Gallery
+            </button>
+          </div>
 
           {loading ? (
-            <div className="mt-4 grid grid-cols-2 gap-[1mm] md:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={index}
-                  className="aspect-[3/4] animate-pulse rounded-[1.8rem] bg-white/70"
+                  className="aspect-[3/4] animate-pulse rounded-lg bg-white/8"
                 />
               ))}
             </div>
           ) : (
-            <div className="mt-4 grid grid-cols-2 gap-[1mm] md:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {posters.map((poster) => (
                 <PosterMosaicCard
                   key={poster.id}
@@ -761,29 +862,56 @@ export function WorkspacePage() {
         </div>
       </section>
 
-      {shouldShowFloatingComposer ? (
+      {shouldRenderFloatingComposer ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-3">
-          <div className="pointer-events-auto w-full max-w-[760px]">
-            <ChatComposer
-              attachedTemplateTitle={selectedPoster?.title ?? ""}
-              compact
-              notice={chatNotice}
-              onOpenPanel={floatingPanelRecord ? () => openGenerationPanel(floatingPanelRecord.id) : undefined}
-              onPromptChange={setChatDraft}
-              onReferenceImageChange={handleReferenceImageChange}
-              onRemoveReferenceImage={() => setReferenceImage(null)}
-              onSubmit={submitChatGeneration}
-              onSelectModel={setSelectedModelId}
-              onSelectRatio={setSelectedRatioId}
-              panelRecord={floatingPanelRecord}
-              prompt={chatDraft}
-              referenceImage={referenceImage}
-              selectedModelId={selectedModelId}
-              selectedRatioId={selectedRatioId}
-              submitLabel={pendingChatRecord ? "生成中..." : "继续生图"}
-              uploadInputId="workspace-chat-mini-upload"
-              variant="floating"
-            />
+          <div
+            ref={floatingComposerRef}
+            data-testid={isFloatingComposerExpanded ? "floating-chat-composer-expanded" : "floating-chat-composer-wrap"}
+            className={`pointer-events-auto w-full ${isFloatingComposerExpanded ? "max-w-4xl" : "max-w-[760px]"}`}
+          >
+            {isFloatingComposerExpanded ? (
+              <ChatComposer
+                attachedTemplateTitle={selectedPoster?.title ?? ""}
+                notice={chatNotice}
+                onPromptChange={setChatDraft}
+                onReferenceImageChange={handleReferenceImageChange}
+                onRemoveReferenceImage={() => setReferenceImage(null)}
+                onSubmit={submitChatGeneration}
+                onSelectModel={setSelectedModelId}
+                onSelectRatio={setSelectedRatioId}
+                prompt={chatDraft}
+                referenceImage={referenceImage}
+                selectedModelId={selectedModelId}
+                selectedRatioId={selectedRatioId}
+                submitLabel={pendingChatRecord ? "生成中..." : "开始生图"}
+                uploadInputId="workspace-chat-floating-upload"
+                variant="floating"
+              />
+            ) : (
+              <div
+                data-testid="floating-chat-composer-collapsed"
+                className={`${
+                  isFloatingComposerClosing ? "workspace-floating-composer-pop-out" : "workspace-floating-composer-pop"
+                } flex min-h-14 items-center gap-3 overflow-hidden rounded-lg border border-white/6 bg-[#181918]/72 px-4 py-3 text-neutral-100 shadow-[0_24px_58px_rgba(0,0,0,0.46)] backdrop-blur-2xl`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsFloatingComposerExpanded(true)}
+                  className="min-w-0 flex-1 cursor-pointer truncate text-left text-sm font-light leading-6 text-neutral-400 transition hover:text-neutral-100"
+                  aria-label="展开子对话框"
+                >
+                  {floatingComposerPreviewText}
+                </button>
+                <button
+                  type="button"
+                  onClick={submitChatGeneration}
+                  aria-label={pendingChatRecord ? "生成中..." : "开始生图"}
+                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-neutral-100 text-xl font-semibold text-black shadow-xl transition hover:scale-105 hover:bg-white active:scale-95"
+                >
+                  ↑
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -876,12 +1004,14 @@ function ChatComposer({
   const [openDropdown, setOpenDropdown] = useState<null | "model" | "ratio">(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const isMainComposer = variant === "main";
+  const isFloatingComposer = variant === "floating";
+  const isDarkComposer = isMainComposer || isFloatingComposer;
   const isPanelComposer = variant === "panel";
   const outerClassName =
     isPanelComposer
       ? "rounded-[1.65rem] bg-white/78 text-slate-950 shadow-[0_14px_38px_rgba(8,12,20,0.08)] backdrop-blur-sm"
-      : isMainComposer
-        ? "rounded-[2rem] bg-white text-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.08)]"
+      : isDarkComposer
+        ? "overflow-hidden rounded-lg border border-white/6 bg-[#181918]/48 text-neutral-100 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.62)] backdrop-blur-2xl"
         : "rounded-[2rem] border border-slate-900/10 bg-[#f7f2e8]/96 text-slate-950 shadow-[0_28px_90px_rgba(8,12,20,0.2)] backdrop-blur-xl";
   const inputShellClass = isPanelComposer
     ? "rounded-[1.35rem] bg-white shadow-[0_10px_28px_rgba(15,23,42,0.06)]"
@@ -974,7 +1104,7 @@ function ChatComposer({
                     <DropdownButton
                       compact
                       isOpen={openDropdown === "model"}
-                      label="模型"
+                      label="Model"
                       value={formatModelLabel(selectedModelId)}
                       onToggle={() => setOpenDropdown((current) => (current === "model" ? null : "model"))}
                     />
@@ -1003,7 +1133,7 @@ function ChatComposer({
                     <DropdownButton
                       compact
                       isOpen={openDropdown === "ratio"}
-                      label="比例"
+                      label="Ratio"
                       value={formatRatioLabel(selectedRatioId)}
                       onToggle={() => setOpenDropdown((current) => (current === "ratio" ? null : "ratio"))}
                     />
@@ -1047,34 +1177,51 @@ function ChatComposer({
     );
   }
 
-  if (isMainComposer) {
+  if (isDarkComposer) {
     return (
       <div ref={composerRef} className={outerClassName}>
-        <div className="grid grid-cols-[92px_minmax(0,1fr)] items-stretch gap-5 px-5 py-5 sm:px-6 sm:py-6">
-          <div className="flex items-start justify-center pt-1">
-            {referenceImage ? (
-              <div className="relative h-28 w-[5.4rem] overflow-hidden rounded-[1rem] border border-slate-900/6 bg-white shadow-[0_10px_26px_rgba(15,23,42,0.06)] -rotate-[8deg]">
-                <img src={referenceImage.url} alt={referenceImage.name} className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  onClick={onRemoveReferenceImage}
-                  className="absolute top-2 right-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-slate-950/82 text-xs font-semibold text-white"
-                  aria-label="清除上传图片"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <label
-                htmlFor={uploadInputId}
-                aria-label="上传图片"
-                className="flex h-28 w-[5.4rem] cursor-pointer items-center justify-center rounded-[1rem] border border-slate-900/6 bg-white text-center shadow-[0_10px_26px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:border-slate-900/14 -rotate-[8deg]"
-              >
-                <span className="text-[2.1rem] font-light leading-none text-slate-600">+</span>
-                <span className="sr-only">上传图片</span>
-              </label>
-            )}
+        <div className="px-6 pt-7 pb-4 sm:px-8 sm:pt-8">
+          {referenceImage || attachedTemplateTitle ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {referenceImage ? (
+                <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/6 px-2 py-1.5 text-xs font-semibold text-neutral-300">
+                  <img src={referenceImage.url} alt={referenceImage.name} className="h-8 w-8 rounded-md object-cover" />
+                  <span className="max-w-[10rem] truncate">{referenceImage.name}</span>
+                  <button
+                    type="button"
+                    onClick={onRemoveReferenceImage}
+                    className="ml-1 cursor-pointer text-neutral-500 transition hover:text-white"
+                    aria-label="清除上传图片"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+              {attachedTemplateTitle ? (
+                <span className="rounded-lg border border-[#ffb4aa]/18 bg-[#ffb4aa]/10 px-3 py-2 text-xs font-semibold text-[#ffdad5]">
+                  {attachedTemplateTitle}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
+          <textarea
+            className="min-h-[140px] w-full resize-none border-0 bg-transparent text-xl leading-relaxed font-light text-neutral-100 outline-none placeholder:text-neutral-700"
+            placeholder="A lone wanderer stands at the edge of a neon-drenched futuristic canyon, cinematic lighting, 8k resolution, film grain..."
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <label
+              htmlFor={uploadInputId}
+              className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-white/7 px-4 text-xs font-bold tracking-[0.14em] text-neutral-300 uppercase transition hover:bg-white/12 hover:text-white"
+            >
+              <span aria-hidden="true" className="text-sm leading-none">▣</span>
+              Reference
+            </label>
             <input
               id={uploadInputId}
               hidden
@@ -1085,80 +1232,72 @@ function ChatComposer({
                 event.currentTarget.value = "";
               }}
             />
-          </div>
 
-          <div className="relative min-w-0">
-            <div className="relative min-h-[176px] rounded-[1.5rem] bg-transparent">
-              <textarea
-                className="min-h-[176px] w-full resize-none border-0 bg-transparent px-2 py-1 text-[15px] leading-[1.7] text-slate-950 outline-none placeholder:text-slate-400"
-                placeholder="请描述你想生成的图片"
-                value={prompt}
-                onChange={(event) => onPromptChange(event.target.value)}
+            <div className="mx-2 hidden h-6 w-px bg-white/10 sm:block" />
+
+            <div className="relative">
+              <DropdownButton
+                isOpen={openDropdown === "model"}
+                label="Model"
+                tone="dark"
+                value={formatModelLabel(selectedModelId)}
+                onToggle={() => setOpenDropdown((current) => (current === "model" ? null : "model"))}
               />
-
-              <div className="absolute right-0 bottom-0 left-0 flex items-end justify-between gap-4 border-t border-slate-900/8 pt-4">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="relative">
-                    <DropdownButton
-                      isOpen={openDropdown === "model"}
-                      label="模型"
-                      value={formatModelLabel(selectedModelId)}
-                      onToggle={() => setOpenDropdown((current) => (current === "model" ? null : "model"))}
+              {openDropdown === "model" ? (
+                <DropdownPanel bodyClassName="max-h-[12rem]" className="left-0 w-[min(30rem,calc(100vw-6rem))]" placement="up" tone="dark">
+                  {chatModelOptions.map((option) => (
+                    <DropdownOption
+                      key={option.id}
+                      description={option.description}
+                      label={option.label}
+                      selected={selectedModelId === option.id}
+                      tone="dark"
+                      onClick={() => {
+                        onSelectModel(option.id);
+                        setOpenDropdown(null);
+                      }}
                     />
-                    {openDropdown === "model" ? (
-                      <DropdownPanel bodyClassName="max-h-[12rem]" className="left-0 w-[min(30rem,calc(100vw-6rem))]" placement="up">
-                        {chatModelOptions.map((option) => (
-                          <DropdownOption
-                            key={option.id}
-                            description={option.description}
-                            label={option.label}
-                            selected={selectedModelId === option.id}
-                            onClick={() => {
-                              onSelectModel(option.id);
-                              setOpenDropdown(null);
-                            }}
-                          />
-                        ))}
-                      </DropdownPanel>
-                    ) : null}
-                  </div>
-                  <div className="relative">
-                    <DropdownButton
-                      isOpen={openDropdown === "ratio"}
-                      label="比例"
-                      value={formatRatioLabel(selectedRatioId)}
-                      onToggle={() => setOpenDropdown((current) => (current === "ratio" ? null : "ratio"))}
-                    />
-                    {openDropdown === "ratio" ? (
-                      <DropdownPanel bodyClassName="max-h-[10rem]" className="left-0 w-[min(22rem,calc(100vw-6rem))]" placement="up">
-                        {chatRatioOptions.map((option) => (
-                          <DropdownOption
-                            key={option.id}
-                            description={option.description}
-                            label={option.label}
-                            selected={selectedRatioId === option.id}
-                            onClick={() => {
-                              onSelectRatio(option.id);
-                              setOpenDropdown(null);
-                            }}
-                          />
-                        ))}
-                      </DropdownPanel>
-                    ) : null}
-                  </div>
-                </div>
+                  ))}
+                </DropdownPanel>
+              ) : null}
+            </div>
 
-                <button
-                  type="button"
-                  onClick={onSubmit}
-                  aria-label={submitLabel}
-                  className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-950 text-xl font-semibold text-white transition hover:bg-slate-800"
-                >
-                  ↑
-                </button>
-              </div>
+            <div className="relative">
+              <DropdownButton
+                isOpen={openDropdown === "ratio"}
+                label="Ratio"
+                tone="dark"
+                value={formatRatioLabel(selectedRatioId)}
+                onToggle={() => setOpenDropdown((current) => (current === "ratio" ? null : "ratio"))}
+              />
+              {openDropdown === "ratio" ? (
+                <DropdownPanel bodyClassName="max-h-[10rem]" className="left-0 w-[min(22rem,calc(100vw-6rem))]" placement="up" tone="dark">
+                  {chatRatioOptions.map((option) => (
+                    <DropdownOption
+                      key={option.id}
+                      description={option.description}
+                      label={option.label}
+                      selected={selectedRatioId === option.id}
+                      tone="dark"
+                      onClick={() => {
+                        onSelectRatio(option.id);
+                        setOpenDropdown(null);
+                      }}
+                    />
+                  ))}
+                </DropdownPanel>
+              ) : null}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={onSubmit}
+            aria-label={submitLabel}
+            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center self-end rounded-full bg-neutral-100 text-xl font-semibold text-black shadow-xl transition hover:scale-105 hover:bg-white active:scale-95 sm:self-auto"
+          >
+            ↑
+          </button>
         </div>
       </div>
     );
@@ -1257,7 +1396,7 @@ function ChatComposer({
                   <div className="relative">
                     <DropdownButton
                       isOpen={openDropdown === "model"}
-                      label="模型"
+                      label="Model"
                       value={formatModelLabel(selectedModelId)}
                       onToggle={() => setOpenDropdown((current) => (current === "model" ? null : "model"))}
                     />
@@ -1285,7 +1424,7 @@ function ChatComposer({
                   <div className="relative">
                     <DropdownButton
                       isOpen={openDropdown === "ratio"}
-                      label="比例"
+                      label="Ratio"
                       value={formatRatioLabel(selectedRatioId)}
                       onToggle={() => setOpenDropdown((current) => (current === "ratio" ? null : "ratio"))}
                     />
@@ -1439,29 +1578,43 @@ function DropdownButton({
   isOpen,
   label,
   onToggle,
+  tone = "light",
   value
 }: {
   compact?: boolean;
   isOpen: boolean;
   label: string;
   onToggle: () => void;
+  tone?: "dark" | "light";
   value: string;
 }) {
+  const darkIdleClass = "bg-white/7 text-neutral-300 hover:bg-white/12 hover:text-white";
+  const darkOpenClass = "bg-white/12 text-white shadow-[0_16px_32px_rgba(0,0,0,0.22)]";
+  const lightIdleClass = "border-slate-900/10 bg-white text-slate-700 hover:border-slate-900/18 hover:bg-slate-50";
+  const lightOpenClass = "border-slate-900 bg-slate-950 text-white shadow-[0_16px_32px_rgba(15,23,42,0.18)]";
+  const toneClass = tone === "dark" ? (isOpen ? darkOpenClass : darkIdleClass) : isOpen ? lightOpenClass : lightIdleClass;
+  const labelClass =
+    tone === "dark"
+      ? "text-xs font-bold tracking-[0.14em] text-neutral-300 uppercase"
+      : isOpen
+        ? "text-white/72"
+        : "text-slate-400";
+  const valueClass = tone === "dark" ? "truncate text-right text-xs font-bold tracking-normal text-neutral-300 normal-case" : "truncate text-right";
+  const arrowClass = tone === "dark" ? "text-neutral-500" : isOpen ? "text-white/72" : "text-slate-400";
+  const buttonSizeClass =
+    tone === "dark"
+      ? `h-9 rounded-lg px-4 text-xs font-bold ${compact ? "min-w-[8.75rem]" : "min-w-[10rem]"}`
+      : `h-11 rounded-[1rem] border px-3.5 text-sm font-semibold ${compact ? "min-w-[8.75rem]" : "min-w-[10rem]"}`;
+
   return (
     <button
       type="button"
       onClick={onToggle}
-      className={`inline-flex h-11 max-w-full cursor-pointer items-center justify-between gap-2 rounded-[1rem] border px-3.5 text-sm font-semibold transition ${
-        compact ? "min-w-[8.75rem]" : "min-w-[10rem]"
-      } ${
-        isOpen
-          ? "border-slate-900 bg-slate-950 text-white shadow-[0_16px_32px_rgba(15,23,42,0.18)]"
-          : "border-slate-900/10 bg-white text-slate-700 hover:border-slate-900/18 hover:bg-slate-50"
-      }`}
+      className={`inline-flex max-w-full cursor-pointer items-center justify-between gap-2 transition ${buttonSizeClass} ${toneClass}`}
     >
-      <span className={isOpen ? "text-white/72" : "text-slate-400"}>{label}</span>
-      <span className="truncate text-right">{value}</span>
-      <span className={`text-xs transition ${isOpen ? "rotate-180 text-white/72" : "text-slate-400"}`}>▾</span>
+      <span className={labelClass}>{label}</span>
+      <span className={valueClass}>{value}</span>
+      <span className={`text-xs transition ${isOpen ? "rotate-180" : ""} ${arrowClass}`}>▾</span>
     </button>
   );
 }
@@ -1472,6 +1625,7 @@ function DropdownPanel({
   className = "",
   maxHeightClass = "max-h-[22rem]",
   placement = "down",
+  tone = "light",
   title
 }: {
   bodyClassName?: string;
@@ -1479,20 +1633,31 @@ function DropdownPanel({
   className?: string;
   maxHeightClass?: string;
   placement?: "down" | "up";
+  tone?: "dark" | "light";
   title?: string;
 }) {
-  const placementClass = placement === "up" ? "bottom-full left-0 mb-0 origin-bottom-left" : "top-full left-0 mt-2 origin-top-left";
+  const placementClass =
+    placement === "up"
+      ? `bottom-full left-0 ${tone === "dark" ? "mb-3" : "mb-0"} origin-bottom-left`
+      : `top-full left-0 ${tone === "dark" ? "mt-3" : "mt-2"} origin-top-left`;
+  const panelClass =
+    tone === "dark"
+      ? "rounded-lg border-white/10 bg-[#181918]/96 text-neutral-100 shadow-none backdrop-blur-xl"
+      : "rounded-[1.45rem] border-slate-900/10 bg-white text-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.18)]";
+  const titleClass = tone === "dark" ? "border-white/8 text-neutral-300" : "border-slate-900/8 text-slate-900";
+  const panelPaddingClass = tone === "dark" ? "p-2" : "";
+  const bodyPaddingClass = tone === "dark" ? "" : "p-2";
 
   return (
     <div
-      className={`absolute z-30 overflow-hidden rounded-[1.45rem] border border-slate-900/10 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)] ${placementClass} ${className}`}
+      className={`absolute z-30 overflow-hidden border ${panelPaddingClass} ${panelClass} ${placementClass} ${className}`}
     >
       {title ? (
-        <div className="border-b border-slate-900/8 px-4 py-3">
-          <p className="text-xs font-semibold text-slate-900">{title}</p>
+        <div className={`border-b px-3 py-3 ${titleClass}`}>
+          <p className="text-xs font-semibold">{title}</p>
         </div>
       ) : null}
-      <div className={`overflow-y-auto p-2 ${bodyClassName || maxHeightClass}`}>{children}</div>
+      <div className={`overflow-y-auto ${bodyPaddingClass} ${bodyClassName || maxHeightClass}`}>{children}</div>
     </div>
   );
 }
@@ -1501,26 +1666,51 @@ function DropdownOption({
   description,
   label,
   onClick,
-  selected
+  selected,
+  tone = "light"
 }: {
   description: string;
   label: string;
   onClick: () => void;
   selected: boolean;
+  tone?: "dark" | "light";
 }) {
+  const optionClass =
+    tone === "dark"
+      ? selected
+        ? "bg-white/8 text-white"
+        : "text-neutral-300 hover:bg-white/8 hover:text-white"
+      : selected
+        ? "bg-slate-950 text-white"
+        : "text-slate-900 hover:bg-slate-50";
+  const descriptionClass =
+    tone === "dark"
+      ? selected
+        ? "text-neutral-400"
+        : "text-neutral-500"
+      : selected
+        ? "text-white/72"
+        : "text-slate-500";
+  const checkClass =
+    tone === "dark"
+      ? selected
+        ? "text-[#ffb4aa]"
+        : "text-transparent"
+      : selected
+        ? "text-white"
+        : "text-transparent";
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full cursor-pointer items-start justify-between gap-4 rounded-[1.15rem] px-4 py-3.5 text-left transition ${
-        selected ? "bg-slate-950 text-white" : "text-slate-900 hover:bg-slate-50"
-      }`}
+      className={`flex w-full cursor-pointer items-start justify-between gap-4 rounded-md px-3 py-2.5 text-left text-sm font-semibold transition ${optionClass}`}
     >
       <div className="space-y-1">
-        <p className="text-sm font-semibold leading-6">{label}</p>
-        <p className={`text-xs leading-5 ${selected ? "text-white/72" : "text-slate-500"}`}>{description}</p>
+        <p className="text-sm leading-5 font-semibold">{label}</p>
+        <p className={`text-xs leading-5 ${descriptionClass}`}>{description}</p>
       </div>
-      <span className={`mt-1 text-sm font-semibold ${selected ? "text-white" : "text-transparent"}`}>✓</span>
+      <span className={`mt-0.5 text-sm font-semibold ${checkClass}`}>✓</span>
     </button>
   );
 }
@@ -1764,7 +1954,7 @@ function ModeTitlePicker({
   onSelect: (mode: WorkspaceMode) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -1785,23 +1975,27 @@ function ModeTitlePicker({
   }, [open]);
 
   const label = mode === "chat" ? "AI Chat" : "AI Draw";
+  const alternateModes = (["chat", "draw"] as WorkspaceMode[]).filter((item) => item !== mode);
 
   return (
-    <div ref={rootRef} className="relative text-center">
-      <h2 className="font-[var(--font-editorial)] text-[clamp(1.3rem,1.85vw,1.8rem)] leading-none tracking-[-0.035em] text-slate-950">
-        <span className="relative inline-flex align-baseline">
+    <div className="flex justify-center text-center">
+      <h1 className="inline-flex items-baseline whitespace-nowrap font-[var(--font-ui)] text-[1.45rem] leading-none font-extrabold tracking-normal text-white sm:text-4xl md:text-5xl">
+        <span>Start Creating With&nbsp;</span>
+        <span ref={rootRef} className="relative inline-flex align-baseline">
           <button
             type="button"
             onClick={() => setOpen((current) => !current)}
-            className="cursor-pointer text-sky-500 transition hover:text-sky-600"
+            className="inline-flex cursor-pointer items-center leading-none tracking-normal transition"
           >
-            {label}
-            <span className="ml-1 inline-block text-[0.5em] align-middle">▾</span>
+            <span className="bg-gradient-to-r from-[#ffb4aa] to-[#e50914] bg-clip-text text-transparent">
+              {label}
+            </span>
+            <span className="ml-1 inline-flex text-[0.34em] leading-none text-[#FFB4AA]/80">⌄</span>
           </button>
 
           {open ? (
-            <div className="absolute top-full left-0 z-30 mt-2 min-w-[9.5rem] max-w-[11rem] overflow-hidden rounded-[1.2rem] border border-slate-900/8 bg-white/96 p-[0.3125rem] text-left shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-sm">
-              {(["chat", "draw"] as WorkspaceMode[]).map((item) => (
+            <span className="absolute top-full left-0 z-30 mt-[calc((4rem-1em)/2)] min-w-[11rem] py-0 text-left leading-none drop-shadow-[0_22px_50px_rgba(0,0,0,0.52)]">
+              {alternateModes.map((item) => (
                 <button
                   key={item}
                   type="button"
@@ -1809,19 +2003,17 @@ function ModeTitlePicker({
                     onSelect(item);
                     setOpen(false);
                   }}
-                  className={`flex w-full cursor-pointer items-center justify-between rounded-[0.95rem] px-3 py-[0.5625rem] text-left text-[clamp(1.3rem,1.85vw,1.8rem)] leading-none font-semibold transition ${
-                    mode === item ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-                  }`}
+                  className="block w-full cursor-pointer px-0 py-0 text-left font-[var(--font-ui)] leading-none font-extrabold tracking-normal transition"
                 >
-                  <span className="whitespace-nowrap">{item === "chat" ? "AI Chat" : "AI Draw"}</span>
-                  {mode === item ? <span className="text-[0.72em] text-white/70">当前</span> : null}
+                  <span className="whitespace-nowrap bg-gradient-to-r from-[#ffb4aa] to-[#e50914] bg-clip-text text-transparent">
+                    {item === "chat" ? "AI Chat" : "AI Draw"}
+                  </span>
                 </button>
               ))}
-            </div>
+            </span>
           ) : null}
         </span>
-        <span className="text-slate-950"> 刷出电影感</span>
-      </h2>
+      </h1>
     </div>
   );
 }
@@ -1878,46 +2070,46 @@ function DrawWorkspace({
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-xs tracking-[0.26em] text-sky-700 uppercase">AI Draw Mode</p>
-        <h3 className="mt-2 text-2xl font-semibold text-slate-950">六模块参数工作区</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="text-xs tracking-[0.26em] text-[#ffb4aa] uppercase">AI Draw Mode</p>
+        <h3 className="mt-2 text-2xl font-semibold text-white">六模块参数工作区</h3>
+        <p className="mt-2 text-sm leading-6 text-neutral-400">
           参考海报会先作为占位插入工作区，再由用户多选六个参数模块，触发 AI 识别并把结果灌入对应模块，最后提交生成占位结果。
         </p>
       </div>
 
-      <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-white p-4">
+      <div className="rounded-lg border border-dashed border-white/12 bg-white/5 p-4">
         {selectedPoster ? (
           <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-            <div className="overflow-hidden rounded-[1.3rem] bg-slate-950">
+            <div className="overflow-hidden rounded-lg bg-slate-950">
               <img src={selectedPoster.imageUrl} alt={selectedPoster.title} className="h-full w-full object-cover" />
             </div>
             <div>
-              <p className="text-xs tracking-[0.24em] text-sky-700 uppercase">Reference Inserted</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-950">{selectedPoster.title}</h4>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{selectedPoster.description}</p>
-              <p className="mt-4 rounded-[1.2rem] border border-sky-100 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
+              <p className="text-xs tracking-[0.24em] text-[#ffb4aa] uppercase">Reference Inserted</p>
+              <h4 className="mt-2 text-xl font-semibold text-white">{selectedPoster.title}</h4>
+              <p className="mt-2 text-sm leading-6 text-neutral-400">{selectedPoster.description}</p>
+              <p className="mt-4 rounded-lg border border-[#ffb4aa]/18 bg-[#ffb4aa]/10 px-4 py-3 text-sm leading-6 text-[#ffdad5]">
                 {drawMessage}
               </p>
             </div>
           </div>
         ) : (
-          <p className="text-sm leading-7 text-slate-500">
+          <p className="text-sm leading-7 text-neutral-400">
             当前还没有进入 AI Draw 的参考海报。你可以从海报库页通过 Use -&gt; AI Draw 进入，或者直接点击本页下方灵感区海报。
           </p>
         )}
       </div>
 
-      <div className="rounded-[1.5rem] border border-slate-900/8 bg-white p-4 shadow-sm">
+      <div className="rounded-lg border border-white/6 bg-white/5 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">Parameter Injection</p>
-            <h4 className="mt-2 text-lg font-semibold text-slate-950">选择要从参考海报提取的模块</h4>
+            <p className="text-xs tracking-[0.24em] text-neutral-500 uppercase">Parameter Injection</p>
+            <h4 className="mt-2 text-lg font-semibold text-white">选择要从参考海报提取的模块</h4>
           </div>
 
           <button
             type="button"
             onClick={applyReferenceToDrawModules}
-            className="cursor-pointer rounded-[1.1rem] bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="cursor-pointer rounded-lg bg-neutral-100 px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white"
           >
             识别并灌入所选模块
           </button>
@@ -1932,10 +2124,10 @@ function DrawWorkspace({
                 key={module.key}
                 type="button"
                 onClick={() => toggleDrawImportSelection(module.key)}
-                className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition ${
+                className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                   moduleState.selectedForImport
-                    ? "bg-sky-500 text-white"
-                    : "border border-slate-900/10 bg-slate-50 text-slate-600 hover:border-sky-300 hover:text-slate-950"
+                    ? "bg-[#e50914] text-white"
+                    : "border border-white/8 bg-white/6 text-neutral-400 hover:border-[#ffb4aa]/38 hover:text-white"
                 }`}
               >
                 {module.label}
@@ -1944,16 +2136,16 @@ function DrawWorkspace({
           })}
         </div>
 
-        <div className="mt-4 grid gap-3 rounded-[1.3rem] border border-slate-900/8 bg-slate-50 p-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 rounded-lg border border-white/6 bg-[#0d0e0d]/72 p-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs tracking-[0.22em] text-slate-400 uppercase">Injection Queue</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">
+            <p className="text-xs tracking-[0.22em] text-neutral-500 uppercase">Injection Queue</p>
+            <p className="mt-2 text-sm leading-6 text-neutral-300">
               {selectedModuleLabels.length > 0 ? selectedModuleLabels.join(" / ") : "当前还没有选择要识别的模块"}
             </p>
           </div>
           <div>
-            <p className="text-xs tracking-[0.22em] text-slate-400 uppercase">Ready For Generate</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">
+            <p className="text-xs tracking-[0.22em] text-neutral-500 uppercase">Ready For Generate</p>
+            <p className="mt-2 text-sm leading-6 text-neutral-300">
               {readyModuleLabels.length > 0 ? readyModuleLabels.join(" / ") : "先识别并启用至少一个模块"}
             </p>
           </div>
@@ -1966,23 +2158,23 @@ function DrawWorkspace({
           const posterValue = moduleState.importedValue || "等待 AI 识别并写入参数";
 
           return (
-            <article key={module.key} className="rounded-[1.5rem] border border-slate-900/8 bg-white p-4 shadow-sm">
+            <article key={module.key} className="rounded-lg border border-white/6 bg-white/5 p-4 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">{module.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">{posterValue}</p>
+                  <p className="text-xs tracking-[0.24em] text-neutral-500 uppercase">{module.label}</p>
+                  <p className="mt-2 text-sm leading-6 text-neutral-300">{posterValue}</p>
                   {moduleState.selectedForImport ? (
-                    <p className="mt-2 text-xs tracking-[0.22em] text-sky-700 uppercase">已加入识别队列</p>
+                    <p className="mt-2 text-xs tracking-[0.22em] text-[#ffb4aa] uppercase">已加入识别队列</p>
                   ) : null}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => toggleDrawModule(module.key)}
-                  className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  className={`cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold transition ${
                     moduleState.enabled
-                      ? "bg-slate-950 text-white"
-                      : "border border-slate-900/10 bg-slate-50 text-slate-500"
+                      ? "bg-neutral-100 text-black"
+                      : "border border-white/8 bg-white/6 text-neutral-500"
                   }`}
                 >
                   {moduleState.enabled ? "已启用" : "未启用"}
@@ -1990,12 +2182,12 @@ function DrawWorkspace({
               </div>
 
               <div className="mt-5">
-                <div className="flex items-center justify-between text-xs tracking-[0.22em] text-slate-400 uppercase">
+                <div className="flex items-center justify-between text-xs tracking-[0.22em] text-neutral-500 uppercase">
                   <span>Weight</span>
                   <span>{moduleState.weight}%</span>
                 </div>
                 <input
-                  className="mt-3 w-full accent-slate-950"
+                  className="mt-3 w-full accent-[#ffb4aa]"
                   max={100}
                   min={0}
                   type="range"
@@ -2008,18 +2200,18 @@ function DrawWorkspace({
         })}
       </div>
 
-      <div className="rounded-[1.5rem] border border-slate-900/8 bg-white p-4 shadow-sm">
+      <div className="rounded-lg border border-white/6 bg-white/5 p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs tracking-[0.24em] text-slate-400 uppercase">Generate</p>
-            <h4 className="mt-2 text-lg font-semibold text-slate-950">提交 AI Draw 占位生成</h4>
+            <p className="text-xs tracking-[0.24em] text-neutral-500 uppercase">Generate</p>
+            <h4 className="mt-2 text-lg font-semibold text-white">提交 AI Draw 占位生成</h4>
           </div>
 
           <button
             type="button"
             disabled={isSubmitting}
             onClick={onGenerate}
-            className="cursor-pointer rounded-[1.1rem] bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+            className="cursor-pointer rounded-lg bg-neutral-100 px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting ? "生成中..." : "开始生成"}
           </button>
@@ -2076,10 +2268,6 @@ function formatRatioLabel(ratioId: string) {
 
 function formatGenerationImageIndex(index: number) {
   return String(index + 1).padStart(2, "0");
-}
-
-function getShellHeaderHeight() {
-  return document.querySelector("header")?.getBoundingClientRect().height ?? 88;
 }
 
 async function readFileAsDataUrl(file: File) {

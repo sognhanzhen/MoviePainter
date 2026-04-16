@@ -1,172 +1,202 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
-import { GenerationStatusPill } from "../components/GenerationStatusPill";
-import { historyRecords, posterRecords, type HistoryRecord, type PosterRecord } from "../data/posters";
-import { getCachedHistoryRecord, getCachedHistoryRecords, mergeHistoryRecords, saveHistoryRecordsSnapshot } from "../lib/history-cache";
-import { usePosterCatalog } from "../hooks/usePosterCatalog";
-import { appDataRequest } from "../lib/api";
+import { useMemo, useState } from "react";
+
+type AssetCategory = "All" | "My Favorites";
+
+type CreativeAsset = {
+  category: "Overlays" | "Presets" | "Textures" | "Typography";
+  imageUrl: string;
+  label: string;
+  section: "Essential Textures" | "Recently Added";
+  title: string;
+};
+
+const categoryOptions: AssetCategory[] = ["All", "My Favorites"];
+
+const assetImages = {
+  agedScript: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80",
+  anamorphic: "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=900&q=80",
+  brutalist: "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80",
+  dust: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=900&q=80",
+  grain: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+  kinetic: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=900&q=80",
+  letterbox: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80",
+  optic: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80"
+};
+
+const creativeAssets: CreativeAsset[] = [
+  {
+    category: "Overlays",
+    imageUrl: assetImages.grain,
+    label: "Overlay",
+    section: "Recently Added",
+    title: "16mm Grain Pack"
+  },
+  {
+    category: "Overlays",
+    imageUrl: assetImages.anamorphic,
+    label: "Lighting",
+    section: "Recently Added",
+    title: "Blue Anamorphic"
+  },
+  {
+    category: "Textures",
+    imageUrl: assetImages.brutalist,
+    label: "Texture",
+    section: "Recently Added",
+    title: "Brutalist Surface"
+  },
+  {
+    category: "Presets",
+    imageUrl: assetImages.optic,
+    label: "UI Elements",
+    section: "Recently Added",
+    title: "Optic Interface"
+  },
+  {
+    category: "Presets",
+    imageUrl: assetImages.kinetic,
+    label: "Motion",
+    section: "Recently Added",
+    title: "Kinetic Blur"
+  },
+  {
+    category: "Presets",
+    imageUrl: assetImages.letterbox,
+    label: "Frame",
+    section: "Recently Added",
+    title: "Modern Letterbox"
+  },
+  {
+    category: "Overlays",
+    imageUrl: assetImages.dust,
+    label: "VFX",
+    section: "Recently Added",
+    title: "Dust Particles"
+  },
+  {
+    category: "Typography",
+    imageUrl: assetImages.agedScript,
+    label: "Typography",
+    section: "Recently Added",
+    title: "Aged Script"
+  },
+  {
+    category: "Textures",
+    imageUrl: assetImages.grain,
+    label: "Texture",
+    section: "Essential Textures",
+    title: "Grain v.2"
+  }
+];
 
 export function HistoryPage() {
-  const { status, token } = useAuth();
-  const { posters } = usePosterCatalog(token);
-  const [records, setRecords] = useState<HistoryRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("加载中");
+  const [activeCategory, setActiveCategory] = useState<AssetCategory>("All");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadHistory() {
-      const cachedRecords = getCachedHistoryRecords();
-
-      if (cachedRecords.length > 0) {
-        setRecords(cachedRecords);
-        setLoading(false);
-        setMessage("本地缓存，同步中");
-      } else {
-        setLoading(true);
-        setMessage("加载中");
-      }
-
-      try {
-        const response = await appDataRequest.getHistory(token);
-
-        if (cancelled) {
-          return;
-        }
-
-        const mergedRecords = mergeHistoryRecords(response.records, getCachedHistoryRecords());
-        saveHistoryRecordsSnapshot(mergedRecords);
-        setRecords(mergedRecords.length > 0 ? mergedRecords : historyRecords);
-        setMessage(`已同步 ${response.source}`);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        const cachedRecords = getCachedHistoryRecords();
-        setRecords(cachedRecords.length > 0 ? cachedRecords : historyRecords);
-        setMessage(error instanceof Error ? error.message : "历史记录加载失败");
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+  const filteredAssets = useMemo(() => {
+    if (activeCategory === "All") {
+      return creativeAssets;
     }
 
-    if (!token) {
-      if (status === "authenticated") {
-        setRecords(mergeHistoryRecords(getCachedHistoryRecords(), historyRecords));
-        setLoading(false);
-        setMessage("本地缓存");
-      } else {
-        setRecords(historyRecords);
-        setLoading(false);
-        setMessage("演示数据");
-      }
-      return;
-    }
+    return creativeAssets.filter((asset) =>
+      ["16mm Grain Pack", "Blue Anamorphic", "Aged Script"].includes(asset.title)
+    );
+  }, [activeCategory]);
 
-    void loadHistory();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const sections = ["Recently Added", "Essential Textures"] as const;
 
   return (
-    <section className="space-y-6">
-      <header className="rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-lg shadow-slate-950/6 backdrop-blur">
-        <p className="text-xs tracking-[0.3em] text-sky-700 uppercase">History</p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-950">历史生成记录</h2>
-        <p className="mt-4 rounded-[1.2rem] border border-slate-900/8 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-          {message} / {records.length} 条
-        </p>
-      </header>
-
-      {loading ? (
-        <div className="grid gap-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-[220px] animate-pulse rounded-[2rem] border border-white/60 bg-white/75" />
+    <section className="relative space-y-10">
+      <section className="mx-auto max-w-7xl">
+        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-[#1c1b1b] p-1">
+          {categoryOptions.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setActiveCategory(category)}
+              className={`inline-flex h-9 min-w-[8.75rem] cursor-pointer items-center justify-center rounded-lg px-4 text-xs font-bold transition ${
+                activeCategory === category
+                  ? "bg-gradient-to-r from-[#ffb4aa] to-[#e50914] text-[#410001] shadow-lg shadow-[#e50914]/20"
+                  : "text-white/60 hover:bg-white/7 hover:text-white"
+              }`}
+            >
+              {category}
+            </button>
           ))}
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {records.map((record) => {
-            const poster = findPoster(posters, record.posterId) ?? findPoster(posterRecords, record.posterId);
-            const cachedDetail = getCachedHistoryRecord(record.id);
-            const thumbnail = cachedDetail?.results[0] ?? null;
-            
-            // If the record succeeded but we don't have the generated image yet (loading from Supabase), don't fallback to poster image.
-            const imageUrl = thumbnail?.imageUrl ?? record.previewImageUrl ?? (record.status === "succeeded" ? "" : poster?.imageUrl) ?? "";
-            const imageAlt = thumbnail?.title ?? record.previewTitle ?? (record.status === "succeeded" ? "AI生成图加载中" : poster?.title) ?? "历史生成图";
-            const displayTitle = thumbnail?.title ?? record.previewTitle ?? (record.status === "succeeded" ? "生成图同步中..." : poster?.title) ?? "未找到参考海报";
-            const displayOutputs = cachedDetail ? cachedDetail.results.length || record.outputs : record.outputs;
+      </section>
 
-            return (
-              <article
-                key={record.id}
-                className="grid gap-4 rounded-[2rem] border border-white/70 bg-white/90 p-4 shadow-lg shadow-slate-950/5 backdrop-blur md:grid-cols-[220px_1fr]"
-              >
-                <div className="relative overflow-hidden rounded-[1.6rem] bg-slate-950">
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={imageAlt} className="h-full w-full object-cover" />
-                  ) : record.status === "succeeded" ? (
-                    <div className="flex h-full min-h-[220px] items-center justify-center bg-slate-100">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-sky-500" />
-                        <span className="text-xs font-medium tracking-[0.2em] text-slate-400">SYNCING</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-slate-400">暂无图片</div>
-                  )}
-                </div>
+      <div className="mx-auto max-w-7xl space-y-12">
+        {sections.map((section) => {
+          const sectionAssets = filteredAssets.filter((asset) => asset.section === section);
 
-                <div className="flex flex-col justify-between gap-4 p-2">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Generation Record</p>
-                      <h3 className="mt-2 text-2xl font-semibold text-slate-950">{displayTitle}</h3>
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{record.prompt}</p>
-                    </div>
+          if (sectionAssets.length === 0) {
+            return null;
+          }
 
-                    <div className="flex flex-col items-end gap-3">
-                      <GenerationStatusPill status={record.status} />
-                      <Link
-                        to={`/history/${record.id}`}
-                        className="rounded-full border border-slate-900/10 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:text-slate-950"
-                      >
-                        查看详情
-                      </Link>
-                    </div>
-                  </div>
+          return (
+            <section key={section}>
+              <div className="mb-6 flex items-center gap-4">
+                <h2 className="font-[var(--font-display)] text-lg font-bold tracking-[-0.035em] text-white/90">
+                  {section}
+                </h2>
+                <div className="h-px flex-1 bg-white/5" />
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+                {sectionAssets.map((asset) => (
+                  <AssetCard key={`${asset.section}-${asset.title}`} asset={asset} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
 
-                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-3">
-                    <MetaItem label="模式" value={record.mode === "chat" ? "AI Chat" : "AI Draw"} />
-                    <MetaItem label="时间" value={record.createdAt} />
-                    <MetaItem label="输出数" value={`${displayOutputs} 张`} />
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+      <div className="mt-20 flex justify-center">
+        <button
+          type="button"
+          className="cursor-pointer rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 py-4 font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-[#410001] uppercase shadow-lg shadow-[#e50914]/20 transition hover:scale-105 active:scale-95"
+        >
+          Browse All Assets
+        </button>
+      </div>
+
+      <footer className="mt-24 flex flex-col items-center justify-between gap-8 border-t border-white/5 py-10 md:flex-row">
+        <div className="text-center md:text-left">
+          <p className="font-[var(--font-display)] text-lg font-black text-[#e5e2e1]">MoviePainter</p>
+          <p className="mt-2 text-[10px] tracking-[0.24em] text-neutral-600 uppercase">
+            © 2024 MoviePainter. The Digital Curator.
+          </p>
         </div>
-      )}
+        <nav className="flex gap-10 text-[10px] tracking-[0.24em] uppercase">
+          {["Privacy", "Terms", "Support"].map((item) => (
+            <a key={item} href="#" className="text-neutral-600 transition hover:text-[#e5e2e1]">
+              {item}
+            </a>
+          ))}
+        </nav>
+      </footer>
     </section>
   );
 }
 
-function findPoster(posters: PosterRecord[], posterId: string) {
-  return posters.find((poster) => poster.id === posterId) ?? null;
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
+function AssetCard({ asset }: { asset: CreativeAsset }) {
   return (
-    <div className="rounded-[1.2rem] border border-slate-900/8 bg-slate-50 px-4 py-3">
-      <p className="text-[11px] tracking-[0.24em] text-slate-400 uppercase">{label}</p>
-      <p className="mt-2 font-medium text-slate-900">{value}</p>
-    </div>
+    <article className="group relative aspect-[3/4] cursor-pointer overflow-hidden rounded-lg bg-[#1c1b1b] transition duration-500 hover:scale-[1.02]">
+      <img
+        src={asset.imageUrl}
+        alt={asset.title}
+        className="absolute inset-0 h-full w-full object-cover opacity-90 transition duration-700 group-hover:scale-110 group-hover:opacity-100"
+        loading="lazy"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/16 to-transparent opacity-76 transition group-hover:opacity-92" />
+      <div className="absolute right-0 bottom-0 left-0 translate-y-2 p-4 transition duration-300 group-hover:translate-y-0">
+        <p className="font-[var(--font-display)] text-[9px] font-bold tracking-[0.2em] text-[#ffb4aa] uppercase">
+          {asset.label}
+        </p>
+        <h3 className="mt-1 font-[var(--font-display)] text-sm leading-tight font-bold text-[#e5e2e1]">
+          {asset.title}
+        </h3>
+      </div>
+    </article>
   );
 }

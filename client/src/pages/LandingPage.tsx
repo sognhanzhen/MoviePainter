@@ -1,72 +1,341 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { posterRecords } from "../data/posters";
 
 const defaultWorkspacePath = "/workspace?mode=chat";
-const featuredPosters = posterRecords.slice(0, 4);
+
+const portalCards = [
+  {
+    cta: "Open Vault",
+    description: "Browse curated poster references, visual systems, and cinematic compositions.",
+    href: "/library",
+    title: "Movie Poster Library"
+  },
+  {
+    cta: "Enter Lab",
+    description: "Start from a line of dialogue, a reference frame, or a full poster direction.",
+    href: defaultWorkspacePath,
+    title: "Generation Workspace"
+  },
+  {
+    cta: "Browse Assets",
+    description: "Collect textures, grain overlays, poster presets, and reusable creative fragments.",
+    href: "/history",
+    title: "Assets"
+  }
+];
+
+const accountCards = [
+  {
+    description: "Keep your creator profile, credit status, and production identity ready.",
+    icon: "P",
+    title: "Profile Details"
+  },
+  {
+    description: "Track monthly render tokens and production priority across poster runs.",
+    icon: "G",
+    title: "Generation Credits"
+  },
+  {
+    description: "Review session access, protected routes, and account security defaults.",
+    icon: "S",
+    title: "Security"
+  },
+  {
+    description: "Prepare billing records and subscription tiers for studio-scale work.",
+    icon: "B",
+    title: "Billing"
+  }
+];
 
 export function LandingPage() {
   const { status } = useAuth();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const primaryCtaHref = status === "authenticated" ? defaultWorkspacePath : "/login";
-  const primaryCtaLabel = status === "authenticated" ? "进入工作区" : "登录开始创作";
+  const secondaryCtaHref = status === "authenticated" ? "/history" : "/register";
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return;
+    }
+
+    const particleCanvas = canvas;
+    const particleContext = context;
+    let frameId = 0;
+    const particles = Array.from({ length: 110 }, () => createParticle());
+
+    function resizeCanvas() {
+      const parent = particleCanvas.parentElement;
+      const width = parent?.clientWidth ?? window.innerWidth;
+      const height = parent?.clientHeight ?? 520;
+      const pixelRatio = window.devicePixelRatio || 1;
+
+      particleCanvas.width = width * pixelRatio;
+      particleCanvas.height = height * pixelRatio;
+      particleCanvas.style.width = `${width}px`;
+      particleCanvas.style.height = `${height}px`;
+      particleContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    }
+
+    function draw() {
+      const width = particleCanvas.clientWidth;
+      const height = particleCanvas.clientHeight;
+
+      particleContext.clearRect(0, 0, width, height);
+
+      particles.forEach((particle) => {
+        particle.x += particle.speedX;
+        particle.y += particle.speedY;
+        particle.opacity += particle.growing ? particle.fadeSpeed : -particle.fadeSpeed;
+
+        if (particle.x < 0) particle.x = width;
+        if (particle.x > width) particle.x = 0;
+        if (particle.y < 0) particle.y = height;
+        if (particle.y > height) particle.y = 0;
+        if (particle.opacity >= 0.62) particle.growing = false;
+        if (particle.opacity <= 0.1) particle.growing = true;
+
+        particleContext.beginPath();
+        particleContext.fillStyle = `rgba(255,255,255,${particle.opacity})`;
+        particleContext.shadowBlur = 10;
+        particleContext.shadowColor = "rgba(255,255,255,0.32)";
+        particleContext.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        particleContext.fill();
+        particleContext.shadowBlur = 0;
+      });
+
+      frameId = window.requestAnimationFrame(draw);
+    }
+
+    resizeCanvas();
+    draw();
+    window.addEventListener("resize", resizeCanvas);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", resizeCanvas);
+    };
+  }, [status]);
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#f8f6f1_0%,#efe8dd_100%)] text-slate-700">
-        <div className="rounded-[1.8rem] border border-slate-900/8 bg-white px-8 py-6 shadow-lg">正在进入登录页...</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] text-white">
+        <div className="rounded-lg border border-white/10 bg-white/6 px-8 py-6 shadow-[0_30px_120px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
+          Entering MoviePainter...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#eef6ff_0%,#ffffff_24%,#f7fbff_100%)] text-slate-950">
-      <section className="mx-auto max-w-[1240px] px-5 py-10 sm:px-8 sm:py-14 lg:py-16">
-        <div className="grid gap-10 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-center">
-          <div className="max-w-[34rem]">
-            <p className="text-[11px] tracking-[0.34em] text-sky-700 uppercase">MoviePainter</p>
-            <h1 className="mt-5 font-[var(--font-editorial)] text-5xl leading-[0.94] sm:text-6xl lg:text-7xl">
-              让电影海报生成，变成一条能反复打磨的创作线。
-            </h1>
-            <p className="mt-6 text-base leading-8 text-slate-600 sm:text-lg">
-              官方精选海报先给方向，AI Chat 和 AI Draw 共享同一个工作区，角色、构图、氛围和输出结果都能继续往下推。
-            </p>
+    <div className="relative min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#1a1a1a_0%,#0a0a0a_48%,#050505_100%)] text-white selection:bg-white/20 selection:text-white">
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-[0.035] [background-image:radial-gradient(circle_at_12%_24%,rgba(255,255,255,0.8)_0_0.5px,transparent_0.7px),radial-gradient(circle_at_72%_64%,rgba(255,255,255,0.52)_0_0.5px,transparent_0.7px)] [background-size:3px_3px,4px_4px]" />
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="absolute -top-28 right-[-12%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(255,215,150,0.12)_0%,transparent_62%)] blur-[80px]" />
+        <div className="absolute top-[42rem] left-[-14%] h-[38rem] w-[38rem] rounded-full bg-[radial-gradient(circle,rgba(180,200,255,0.09)_0%,transparent_64%)] blur-[100px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_18%,rgba(10,10,10,0.62)_74%,#0a0a0a_100%)]" />
+      </div>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to={primaryCtaHref}
-                className="inline-flex items-center justify-center rounded-[8px] bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                {primaryCtaLabel}
-              </Link>
-              <Link
-                to={status === "authenticated" ? "/library" : "/register"}
-                className="inline-flex items-center justify-center rounded-[8px] border border-slate-900/10 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-900/18 hover:text-slate-950"
-              >
-                {status === "authenticated" ? "进入海报库" : "创建账号"}
-              </Link>
-            </div>
+      <nav className="fixed top-0 right-0 left-0 z-50 flex items-center justify-between px-6 py-5 sm:px-8">
+        <Link
+          to="/"
+          className="flex-1 font-[var(--font-display)] text-lg font-bold tracking-[0.16em] text-white uppercase transition hover:text-white/78"
+        >
+          MoviePainter
+        </Link>
+        <div className="hidden items-center justify-center gap-10 md:flex">
+          {portalCards.map((portal) => (
+            <Link
+              key={portal.title}
+              to={portal.href}
+              className="font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white/60 uppercase transition hover:text-white"
+            >
+              {portal.title === "Movie Poster Library" ? "Library" : portal.title === "Generation Workspace" ? "Workspace" : "Assets"}
+            </Link>
+          ))}
+        </div>
+        <div className="flex flex-1 items-center justify-end gap-4">
+          <Link
+            to={status === "authenticated" ? "/settings" : "/login"}
+            className="hidden rounded-lg border border-white/10 px-3 py-2 font-[var(--font-display)] text-[10px] font-bold tracking-[0.18em] text-white/58 uppercase transition hover:border-white/22 hover:text-white sm:inline-flex"
+          >
+            Account
+          </Link>
+          <Link
+            to={status === "authenticated" ? "/settings" : "/login"}
+            aria-label="Open account"
+            className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-sm font-bold tracking-[0.12em] text-white transition hover:border-white/40 hover:bg-white/16"
+          >
+            MP
+          </Link>
+        </div>
+      </nav>
 
-            <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm leading-6 text-slate-500">
-              <span>官方精选海报作为灵感入口</span>
-              <span>AI Chat / AI Draw 双模式并行</span>
-              <span>历史生成记录可回看可继续</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-[1mm]">
-            {featuredPosters.map((poster, index) => (
-              <article
-                key={poster.id}
-                className={`relative overflow-hidden rounded-[8px] shadow-[0_18px_48px_rgba(15,23,42,0.14)] ${
-                  index === 0 ? "row-span-2 aspect-[3/4]" : "aspect-[3/4]"
-                }`}
-              >
-                <img src={poster.imageUrl} alt={`${poster.title} 海报`} className="h-full w-full object-cover" />
-              </article>
-            ))}
+      <header className="relative z-10 flex min-h-[88vh] items-center justify-center overflow-hidden px-4 pt-24 text-center">
+        <div className="mx-auto max-w-5xl">
+          <h1 className="font-[var(--font-display)] text-5xl leading-[0.98] font-bold tracking-[-0.07em] text-white sm:text-7xl lg:text-8xl">
+            Paint Your Vision
+            <br />
+            <span className="text-white/92 [text-shadow:0_0_26px_rgba(255,255,255,0.34)]">into the Frame</span>
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-white/68 sm:text-xl">
+            From storyboard to poster art, curate the cinematic language of your next production.
+          </p>
+          <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
+            <Link
+              to={primaryCtaHref}
+              className="inline-flex h-12 min-w-[11rem] items-center justify-center rounded-lg bg-white px-8 text-sm font-bold text-black shadow-[0_0_30px_rgba(255,255,255,0.18)] transition hover:scale-105 hover:bg-white/90 active:scale-95"
+            >
+              Start Creating
+            </Link>
+            <Link
+              to={secondaryCtaHref}
+              className="inline-flex h-12 min-w-[11rem] items-center justify-center border-b border-white/24 px-8 font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white uppercase transition hover:border-white hover:text-white/82"
+            >
+              Explore Assets
+            </Link>
           </div>
         </div>
-      </section>
+      </header>
+
+      <main className="relative z-10">
+        <section className="mx-auto max-w-7xl px-6 py-24 sm:py-28">
+          <div className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div>
+              <span className="mb-2 block font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-white/58 uppercase">
+                Navigation
+              </span>
+              <h2 className="font-[var(--font-display)] text-4xl leading-tight font-bold tracking-[-0.045em] text-white md:text-5xl">
+                Access Portals
+              </h2>
+            </div>
+            <div className="hidden h-px flex-1 bg-white/10 md:block" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {portalCards.map((portal) => (
+              <Link
+                key={portal.title}
+                to={portal.href}
+                className="group relative flex aspect-[3/4] overflow-hidden rounded-lg border border-white/10 bg-white/5 p-8 transition duration-500 hover:scale-[1.02] hover:border-white/20 hover:bg-white/8"
+              >
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/22 to-transparent" />
+                <div className="relative z-10 mt-auto">
+                  <h3 className="font-[var(--font-display)] text-2xl font-bold tracking-[-0.035em] text-white">
+                    {portal.title}
+                  </h3>
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/68">{portal.description}</p>
+                  <span className="mt-6 inline-flex items-center gap-2 font-[var(--font-display)] text-sm font-bold tracking-[0.16em] text-white uppercase transition-all group-hover:gap-4">
+                    {portal.cta}
+                    <span aria-hidden="true">→</span>
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="relative overflow-hidden bg-transparent pt-16 pb-16">
+          <div className="pointer-events-none absolute inset-0 z-0">
+            <canvas ref={canvasRef} className="h-full w-full" />
+          </div>
+
+          <div className="relative z-10 mx-auto mb-28 grid max-w-7xl grid-cols-1 gap-12 px-6 lg:grid-cols-12 lg:gap-16">
+            <div className="lg:col-span-4">
+              <h2 className="font-[var(--font-display)] text-3xl font-bold tracking-[-0.035em] text-white">
+                Account & Curation
+              </h2>
+              <p className="mt-5 leading-7 text-white/60">
+                Manage your creative profile, production credits, and personalized curation settings.
+              </p>
+              <Link
+                to={status === "authenticated" ? "/settings" : "/register"}
+                className="mt-8 flex items-center gap-4 rounded-lg border border-white/10 bg-white/5 p-4 backdrop-blur-md transition hover:bg-white/10"
+              >
+                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
+                  <img
+                    src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80"
+                    alt="Creator profile"
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white">{status === "authenticated" ? "MoviePainter User" : "Julian Voss"}</h3>
+                  <span className="font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white/50 uppercase">
+                    Director Tier
+                  </span>
+                </div>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-8">
+              {accountCards.map((card) => (
+                <Link
+                  key={card.title}
+                  to={status === "authenticated" ? "/settings" : "/register"}
+                  className="group rounded-lg border border-white/10 bg-white/5 p-8 backdrop-blur-md transition duration-300 hover:border-white/20 hover:bg-white/10"
+                >
+                  <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-white/10 font-[var(--font-display)] text-sm font-bold text-white transition group-hover:bg-white group-hover:text-black">
+                    {card.icon}
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/50">{card.description}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <footer className="relative z-10 border-t border-white/10 px-6 py-14">
+            <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
+              <div className="text-center md:text-left">
+                <span className="font-[var(--font-display)] text-lg font-black tracking-[0.16em] text-white">MoviePainter</span>
+                <p className="mt-2 text-sm tracking-wide text-white/40">© 2024 MoviePainter. The Digital Curator.</p>
+              </div>
+              <div className="flex gap-8 text-sm tracking-wide">
+                {["Privacy", "Terms", "Contact"].map((item) => (
+                  <a key={item} href="#" className="text-white/40 transition hover:text-white">
+                    {item}
+                  </a>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                {["Share", "World"].map((item) => (
+                  <a
+                    key={item}
+                    href="#"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
+                    aria-label={item}
+                  >
+                    {item[0]}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </footer>
+        </section>
+      </main>
     </div>
   );
+}
+
+function createParticle() {
+  return {
+    fadeSpeed: Math.random() * 0.005 + 0.002,
+    growing: Math.random() > 0.5,
+    opacity: Math.random() * 0.5 + 0.1,
+    size: Math.random() * 1.6 + 0.45,
+    speedX: (Math.random() - 0.5) * 0.38,
+    speedY: (Math.random() - 0.5) * 0.38,
+    x: Math.random() * 1600,
+    y: Math.random() * 900
+  };
 }

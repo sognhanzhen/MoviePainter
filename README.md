@@ -44,10 +44,16 @@ Optional keys:
 - `JWT_SECRET`
 - `VITE_API_BASE_URL`
 - `AICANAPI_BASE_URL`
+- `AICANAPI_IMAGE_API_STYLE`
+- `AICANAPI_API_KEY`
 - `AICANAPI_DOUBAO_IMAGE_MODEL`
 - `AICANAPI_DOUBAO_API_KEY`
 - `AICANAPI_GEMINI_IMAGE_MODEL`
 - `AICANAPI_GEMINI_API_KEY`
+
+For ModelGate/AICANAPI image generation, set `AICANAPI_BASE_URL=https://mg.aid.pub/api`,
+`AICANAPI_IMAGE_API_STYLE=modelgate`, one shared `AICANAPI_API_KEY`, and the image model names
+used by the workspace.
 
 4. Run the unified local development server:
 

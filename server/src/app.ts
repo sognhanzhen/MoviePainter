@@ -19,7 +19,8 @@ export function createApp() {
       doubaoApiKey: serverConfig.aicanapiDoubaoApiKey,
       doubaoImageModel: serverConfig.aicanapiDoubaoImageModel,
       geminiApiKey: serverConfig.aicanapiGeminiApiKey,
-      geminiImageModel: serverConfig.aicanapiGeminiImageModel
+      geminiImageModel: serverConfig.aicanapiGeminiImageModel,
+      imageApiStyle: serverConfig.aicanapiImageApiStyle
     },
     supabaseServiceRoleKey: serverConfig.supabaseServiceRoleKey,
     supabaseUrl: serverConfig.supabaseUrl

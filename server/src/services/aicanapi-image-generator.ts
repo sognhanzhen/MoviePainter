@@ -11,6 +11,7 @@ export type AicanapiImageGeneratorConfig = {
   doubaoImageModel: string;
   geminiApiKey: string;
   geminiImageModel: string;
+  imageApiStyle: string;
 };
 
 type GenerateWorkspaceImagesInput = {
@@ -50,18 +51,27 @@ export async function generateWorkspaceImages({
   width: number;
 }> {
   const model = resolveModel(config, generation);
+  const apiStyle = resolveImageApiStyle(config);
   const aspectRatio = resolveAspectRatio(generation.ratioId ?? poster.attributes.ratio);
-  const size = resolveOpenAiImageSize(aspectRatio);
+  const size = apiStyle === "modelgate" ? resolveModelGateImageSize(aspectRatio, model.provider) : resolveOpenAiImageSize(aspectRatio);
   const prompt = buildImagePrompt({ aspectRatio, generation, model, poster });
   const outputs =
-    model.provider === "gemini"
+    apiStyle === "modelgate"
+      ? await generateWithModelGate({
+          count: IMAGE_OUTPUT_COUNT,
+          model,
+          prompt,
+          size,
+          url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
+        })
+      : model.provider === "gemini"
       ? await generateWithGemini({ aspectRatio, count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: resolveBaseUrl(config.baseUrl) })
       : await generateWithOpenAiImages({
           count: IMAGE_OUTPUT_COUNT,
           model,
           prompt,
           size,
-          url: `${resolveBaseUrl(config.baseUrl)}/v1/images/generations`
+          url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
         });
   const results = outputs.map((output, index) => ({
     id: `result-${generation.mode}-${poster.id}-${Date.now()}-${index + 1}`,
@@ -86,7 +96,7 @@ function resolveModel(config: AicanapiImageGeneratorConfig, generation: Workspac
 
   if (requestedModel === "nano-banana-2") {
     assertConfigured(config.baseUrl, "AICANAPI_BASE_URL");
-    assertConfigured(config.geminiApiKey, "AICANAPI_GEMINI_API_KEY");
+    assertConfigured(config.geminiApiKey, "AICANAPI_GEMINI_API_KEY 或 AICANAPI_API_KEY");
     assertConfigured(config.geminiImageModel, "AICANAPI_GEMINI_IMAGE_MODEL");
 
     return {
@@ -98,7 +108,7 @@ function resolveModel(config: AicanapiImageGeneratorConfig, generation: Workspac
   }
 
   assertConfigured(config.baseUrl, "AICANAPI_BASE_URL");
-  assertConfigured(config.doubaoApiKey, "AICANAPI_DOUBAO_API_KEY");
+  assertConfigured(config.doubaoApiKey, "AICANAPI_DOUBAO_API_KEY 或 AICANAPI_API_KEY");
   assertConfigured(config.doubaoImageModel, "AICANAPI_DOUBAO_IMAGE_MODEL");
 
   return {
@@ -133,7 +143,7 @@ async function generateWithOpenAiImages(input: {
       size: input.size.value
     };
     const json = await postJson(input.url, input.model.apiKey, payload);
-    const nextImageUrls = extractOpenAiImageUrls(json);
+    const nextImageUrls = extractImageUrls(json);
 
     if (nextImageUrls.length === 0) {
       throw new Error(`${input.model.label} 第 ${index + 1} 张没有返回可展示图片`);
@@ -153,6 +163,67 @@ async function generateWithOpenAiImages(input: {
     title: `生成图 ${index + 1}`,
     width: input.size.width
   }));
+}
+
+async function generateWithModelGate(input: {
+  count: number;
+  model: ResolvedModel;
+  prompt: string;
+  size: ResolvedSize;
+  url: string;
+}): Promise<ImageGenerationOutput[]> {
+  if (input.model.provider === "doubao") {
+    const payload = {
+      output_type: "base64",
+      number_results: input.count,
+      model: input.model.externalModel,
+      prompt: input.prompt,
+      size: input.size.value,
+      output_format: "png"
+    };
+    const json = await postJson(input.url, input.model.apiKey, payload);
+    const imageUrls = extractImageUrls(json);
+
+    if (imageUrls.length === 0) {
+      throw new Error(`${input.model.label} 没有返回可展示图片`);
+    }
+
+    return imageUrls.slice(0, input.count).map((imageUrl, index) => ({
+      height: input.size.height,
+      imageUrl,
+      summary: `${input.model.label} 输出 ${index + 1}`,
+      title: `生成图 ${index + 1}`,
+      width: input.size.width
+    }));
+  }
+
+  const outputs: ImageGenerationOutput[] = [];
+
+  for (let index = 0; index < input.count; index += 1) {
+    const payload = {
+      model: input.model.externalModel,
+      prompt: appendVariantPrompt(input.prompt, index, input.count),
+      size: input.size.value,
+      output_type: "base64",
+      output_format: "png"
+    };
+    const json = await postJson(input.url, input.model.apiKey, payload);
+    const imageUrls = extractImageUrls(json);
+
+    if (imageUrls.length === 0) {
+      throw new Error(`${input.model.label} 第 ${index + 1} 张没有返回可展示图片`);
+    }
+
+    outputs.push({
+      height: input.size.height,
+      imageUrl: imageUrls[0],
+      summary: `${input.model.label} 输出 ${index + 1}`,
+      title: `生成图 ${index + 1}`,
+      width: input.size.width
+    });
+  }
+
+  return outputs;
 }
 
 async function generateWithGeminiNative(input: {
@@ -233,7 +304,7 @@ async function generateWithGemini(input: {
         model: input.model,
         prompt: input.prompt,
         size: input.size,
-        url: `${input.url}/v1/images/generations`
+        url: resolveImageGenerationUrl(input.url, "openai")
       });
     } catch (openAiError) {
       throw new Error(
@@ -254,9 +325,10 @@ async function postJson(url: string, apiKey: string, body: unknown) {
   });
   const text = await response.text();
   const json = parseJson(text);
+  const apiErrorMessage = extractApiErrorMessage(json);
 
-  if (!response.ok) {
-    const message = (extractApiErrorMessage(json) ?? text.trim()) || response.statusText;
+  if (!response.ok || isFailedApiPayload(json)) {
+    const message = (apiErrorMessage ?? text.trim()) || response.statusText;
     throw new Error(`AICANAPI 调用失败 (${response.status}): ${message}`);
   }
 
@@ -281,15 +353,42 @@ function extractApiErrorMessage(json: unknown) {
   }
 
   const error = json.error;
+  const message = json.message;
 
   if (isRecord(error) && typeof error.message === "string") {
     return error.message;
   }
 
-  return typeof json.message === "string" ? json.message : null;
+  if (isRecord(message)) {
+    const nestedError = message.error;
+
+    if (isRecord(nestedError) && typeof nestedError.message === "string") {
+      return nestedError.message;
+    }
+
+    if (typeof message.message === "string") {
+      return message.message;
+    }
+  }
+
+  return typeof message === "string" ? message : null;
 }
 
-function extractOpenAiImageUrls(json: unknown) {
+function isFailedApiPayload(json: unknown) {
+  if (!isRecord(json)) {
+    return false;
+  }
+
+  if (json.status === "error" || json.status === "failed") {
+    return true;
+  }
+
+  const message = json.message;
+
+  return isRecord(message) && (message.status === "error" || message.status === "failed");
+}
+
+function extractImageUrls(json: unknown) {
   if (!isRecord(json) || !Array.isArray(json.data)) {
     return [];
   }
@@ -302,10 +401,22 @@ function extractOpenAiImageUrls(json: unknown) {
     }
 
     const b64Json = item.b64_json;
+    const base64 = item.base64;
+    const content = item.content;
     const url = item.url;
 
     if (typeof b64Json === "string" && b64Json.trim()) {
       imageUrls.push(toDataUrl(b64Json, DEFAULT_IMAGE_MIME_TYPE));
+      continue;
+    }
+
+    if (typeof content === "string" && content.trim()) {
+      imageUrls.push(toDataUrl(content, DEFAULT_IMAGE_MIME_TYPE));
+      continue;
+    }
+
+    if (typeof base64 === "string" && base64.trim()) {
+      imageUrls.push(toDataUrl(base64, DEFAULT_IMAGE_MIME_TYPE));
       continue;
     }
 
@@ -408,9 +519,45 @@ function resolveBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, "");
 }
 
+function resolveImageApiStyle(config: AicanapiImageGeneratorConfig): "modelgate" | "openai" {
+  const explicit = config.imageApiStyle.trim().toLowerCase();
+
+  if (["modelgate", "aicanapi"].includes(explicit)) {
+    return "modelgate";
+  }
+
+  if (["openai", "openai-images"].includes(explicit)) {
+    return "openai";
+  }
+
+  const baseUrl = resolveBaseUrl(config.baseUrl).toLowerCase();
+
+  return baseUrl.includes("mg.aid.pub") || baseUrl.includes("localhost:13148") || baseUrl.includes("127.0.0.1:13148")
+    ? "modelgate"
+    : "openai";
+}
+
+function resolveImageGenerationUrl(baseUrl: string, apiStyle: "modelgate" | "openai") {
+  const url = resolveBaseUrl(baseUrl);
+
+  if (url.endsWith("/images/generations")) {
+    return url;
+  }
+
+  if (url.endsWith("/v1") || url.endsWith("/api/v1")) {
+    return `${url}/images/generations`;
+  }
+
+  if (apiStyle === "modelgate") {
+    return url.endsWith("/api") ? `${url}/v1/images/generations` : `${url}/api/v1/images/generations`;
+  }
+
+  return `${url}/v1/images/generations`;
+}
+
 type ResolvedSize = {
   height: number;
-  value: "1024x1024" | "1024x1536" | "1536x1024";
+  value: string;
   width: number;
 };
 
@@ -436,6 +583,40 @@ function resolveOpenAiImageSize(aspectRatio: string): ResolvedSize {
     value: "1024x1024",
     width: 1024
   };
+}
+
+function resolveModelGateImageSize(aspectRatio: string, provider: ResolvedModel["provider"]): ResolvedSize {
+  if (provider === "doubao") {
+    const sizeByRatio: Record<string, ResolvedSize> = {
+      "1:1": { height: 2048, value: "2048x2048", width: 2048 },
+      "2:3": { height: 2496, value: "1664x2496", width: 1664 },
+      "3:2": { height: 1664, value: "2496x1664", width: 2496 },
+      "3:4": { height: 2304, value: "1728x2304", width: 1728 },
+      "4:3": { height: 1728, value: "2304x1728", width: 2304 },
+      "4:5": { height: 2496, value: "1664x2496", width: 1664 },
+      "5:4": { height: 1728, value: "2304x1728", width: 2304 },
+      "9:16": { height: 2560, value: "1440x2560", width: 1440 },
+      "16:9": { height: 1440, value: "2560x1440", width: 2560 },
+      "21:9": { height: 1296, value: "3024x1296", width: 3024 }
+    };
+
+    return sizeByRatio[aspectRatio] ?? sizeByRatio["1:1"];
+  }
+
+  const sizeByRatio: Record<string, ResolvedSize> = {
+    "1:1": { height: 1024, value: "1024x1024", width: 1024 },
+    "2:3": { height: 1264, value: "848x1264", width: 848 },
+    "3:2": { height: 848, value: "1264x848", width: 1264 },
+    "3:4": { height: 1200, value: "896x1200", width: 896 },
+    "4:3": { height: 896, value: "1200x896", width: 1200 },
+    "4:5": { height: 1152, value: "928x1152", width: 928 },
+    "5:4": { height: 928, value: "1152x928", width: 1152 },
+    "9:16": { height: 1376, value: "768x1376", width: 768 },
+    "16:9": { height: 768, value: "1376x768", width: 1376 },
+    "21:9": { height: 672, value: "1584x672", width: 1584 }
+  };
+
+  return sizeByRatio[aspectRatio] ?? sizeByRatio["1:1"];
 }
 
 function resolveAspectRatio(value: string | undefined) {
