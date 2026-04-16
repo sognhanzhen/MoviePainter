@@ -2,6 +2,10 @@ import path from "node:path";
 import { serverRoot, workspaceRoot } from "./env";
 
 function resolveDatabasePath(databasePath?: string) {
+  if (process.env.VERCEL) {
+    return "/tmp/moviepainter.db";
+  }
+
   const candidate = databasePath?.trim();
 
   if (!candidate) {
