@@ -1,3 +1,5 @@
+import { curatedMoviePosterRecords } from "./curated-movie-posters";
+
 export type AppDataSource = "local-db" | "local-demo" | "supabase" | "workspace-cache";
 
 export type WorkspaceMode = "chat" | "draw";
@@ -16,13 +18,18 @@ export type PosterRecord = {
     tone: string;
   };
   description: string;
+  director?: string;
   genre: string;
   id: string;
   imageUrl: string;
+  imdbId?: string;
   layout: "featured" | "square" | "tall" | "wide";
+  posterCount?: number;
   region: string;
+  releaseDate?: string;
   summary: string;
   tags: string[];
+  tmdbId?: string;
   title: string;
   year: string;
 };
@@ -91,7 +98,7 @@ export type UserSettingsInput = {
 export type WorkspaceGenerationTask = {
   appliedModules: string[];
   id: string;
-  modelId?: "doubao-seedance-5" | "nano-banana-2";
+  modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
   mode: WorkspaceMode;
   moduleWeights: Record<string, number>;
   posterId: string;
@@ -169,7 +176,7 @@ export type AdminDashboardRecord = {
   users: AdminUserItem[];
 };
 
-export const posterRecords: PosterRecord[] = [
+const legacyPosterRecords: PosterRecord[] = [
   {
     id: "ember-city",
     title: "Ember City",
@@ -326,32 +333,34 @@ export const posterRecords: PosterRecord[] = [
   }
 ];
 
+export const posterRecords: PosterRecord[] = curatedMoviePosterRecords;
+
 export const historyRecords: HistoryRecord[] = [
   {
     id: "gen-001",
-    posterId: "ember-city",
+    posterId: "inception",
     mode: "chat",
     status: "succeeded",
     createdAt: "2026-04-10 09:20",
-    prompt: "把这张海报改写成一部近未来女性主角悬疑片的先导海报。",
+    prompt: "基于《Inception》的梦境层级和城市折叠感，生成一张新的科幻悬疑海报。",
     outputs: 4
   },
   {
     id: "gen-002",
-    posterId: "summer-dust",
+    posterId: "dune",
     mode: "draw",
     status: "running",
     createdAt: "2026-04-10 11:05",
-    prompt: "保留旷野留白和旅人比例，重做成低成本独立电影海报。",
+    prompt: "保留沙漠史诗感和人物剪影比例，重做成一张竖版世界观海报。",
     outputs: 2
   },
   {
     id: "gen-003",
-    posterId: "opal-archive",
+    posterId: "spirited-away",
     mode: "draw",
     status: "waiting",
     createdAt: "2026-04-09 21:42",
-    prompt: "以女性奇幻主角为核心，增强符号和仪式感。",
+    prompt: "以奇幻成长故事为核心，增强角色入口、异世界符号和温柔神秘氛围。",
     outputs: 0
   }
 ];

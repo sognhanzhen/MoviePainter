@@ -45,6 +45,90 @@ Relative `DATABASE_PATH` values are resolved from `server/`. If you define it in
 - `AICANAPI_DOUBAO_API_KEY`
 - `AICANAPI_GEMINI_IMAGE_MODEL`
 - `AICANAPI_GEMINI_API_KEY`
+- `DASHSCOPE_API_KEY`
+- `DASHSCOPE_BASE_URL`
+- `DASHSCOPE_WAN_IMAGE_MODEL`
+- `FANART_API_KEY`
+
+## Movie Poster API Source
+
+Movie poster library ingestion uses a two-source pipeline:
+
+1. fanart.tv movie artwork API for poster image and movie title.
+2. Wikidata SPARQL lookup for missing structured movie metadata.
+
+The matching key is always IMDb ID. Do not rely on movie title alone for metadata lookup because title-only search can collide across remakes, translations, and same-name films.
+
+### Endpoints
+
+Poster and title source:
+
+```text
+https://webservice.fanart.tv/v3/movies/{imdbId}?api_key={FANART_API_KEY}
+```
+
+Metadata completion source:
+
+```text
+https://query.wikidata.org/sparql
+```
+
+The Wikidata query must match `wdt:P345` against the IMDb ID, then read:
+
+- `wdt:P57` -> director
+- `wdt:P136` -> genre
+- `wdt:P577` -> release date
+
+### Output Schema
+
+Every imported poster record must normalize these fields before entering the curated poster library:
+
+| Field | Source | Format |
+| --- | --- | --- |
+| `poster` | fanart.tv `movieposter[].url` | image URL |
+| `title` | fanart.tv `name` | plain English title |
+| `genre` | Wikidata genre labels | English labels separated by ` / ` |
+| `releaseDate` | Wikidata publication date | `YYYY-MM-DD` |
+| `director` | Wikidata director labels | names separated by ` / ` |
+| `imdbId` | input / fanart.tv `imdb_id` | IMDb title ID, for example `tt1375666` |
+| `tmdbId` | fanart.tv `tmdb_id` | string ID when present |
+
+When multiple fanart.tv posters exist, prefer an English-language poster with the highest likes. If no English poster exists, use the highest-liked valid poster URL.
+
+When multiple metadata values exist:
+
+- Keep unique values only.
+- Sort repeated text labels consistently.
+- Use ` / ` as the only multi-value separator.
+- For release dates, use the earliest normalized `YYYY-MM-DD` value returned for the exact IMDb ID.
+
+### Validation
+
+Use the local validation script:
+
+```bash
+FANART_API_KEY="<key>" node scripts/test-fanart-api.mjs
+```
+
+Success criteria:
+
+- all 10 sampled IMDb IDs return `PASS`
+- every record has `poster`, `title`, `genre`, `releaseDate`, and `director`
+- final summary reports `passed: 10` and `failed: 0`
+
+Human-readable inspection artifacts from the latest validation are stored under:
+
+- `reports/fanart-metadata-results-2026-04-16.md`
+- `reports/fanart-metadata-results-2026-04-16.csv`
+
+### Management Rules
+
+- Keep `FANART_API_KEY` in local env only. Do not commit real API keys.
+- Treat fanart.tv as the visual asset source, not as the complete movie metadata source.
+- Treat Wikidata as the metadata completion source for this pipeline.
+- Store the final normalized values in Supabase curated poster tables during official library ingestion.
+- If either source fails, do not silently create a partial curated poster. Mark the record as needing manual review.
+- Re-run the validation script before changing the poster ingestion pipeline or swapping metadata sources.
 
 ## Start Commands
 

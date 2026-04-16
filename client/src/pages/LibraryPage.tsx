@@ -27,16 +27,6 @@ const filterLabels = {
   type: "类型"
 } as const;
 
-const directorByPosterId: Record<string, string> = {
-  "atlas-machine": "Denis Villeneuve",
-  "ember-city": "Wong Kar-wai",
-  "monsoon-bird": "Lou Ye",
-  "opal-archive": "Guillermo del Toro",
-  "paper-moon-hotel": "Wes Anderson",
-  "summer-dust": "Chloe Zhao",
-  "velvet-sunrise": "Sofia Coppola"
-};
-
 type FilterKey = keyof typeof filterLabels;
 
 type FilterOption = {
@@ -332,7 +322,7 @@ function formatGenreLabel(genre: string) {
 function buildFilterDefinitions(posters: PosterRecord[]): FilterDefinition[] {
   const genres = uniqueOptions(posters.map((poster) => formatGenreLabel(poster.genre)));
   const years = uniqueOptions(posters.map((poster) => poster.year).sort((a, b) => Number(b) - Number(a)));
-  const directors = uniqueOptions(posters.map((poster) => directorByPosterId[poster.id]).filter(Boolean));
+  const directors = uniqueOptions(posters.map((poster) => poster.director ?? "").filter(Boolean));
 
   return [
     {
@@ -414,7 +404,7 @@ function buildAttributeOptions(
 }
 
 function matchesFilters(poster: PosterRecord, filters: ActiveFilters) {
-  const director = directorByPosterId[poster.id] ?? "";
+  const director = poster.director ?? "";
 
   return (
     (filters.director === "all" || director === filters.director) &&

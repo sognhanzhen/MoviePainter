@@ -306,6 +306,7 @@ export function createSupabaseAppDataProvider({
               tone: attribute?.tone_value ?? "待补充"
             },
             description: String(item.description ?? item.summary ?? ""),
+            director: String(item.region ?? "未标注"),
             genre: String(item.genre ?? "未分类"),
             id: posterId,
             imageUrl: String(item.cover_image_url ?? ""),
@@ -688,6 +689,7 @@ async function getPosterById(supabase: SupabaseClient, fallback: AppDataProvider
           tone: attr?.tone_value ?? "待补充"
         },
         description: String(data.description ?? data.summary ?? ""),
+        director: String(data.region ?? "未标注"),
         genre: String(data.genre ?? "未分类"),
         id: String(data.id),
         imageUrl: String(data.cover_image_url ?? ""),

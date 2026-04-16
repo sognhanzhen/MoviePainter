@@ -40,8 +40,10 @@ export function PosterDetailModal({
               <div className="grid gap-3 sm:grid-cols-2">
                 <MetaCard label="年份" value={poster.year} />
                 <MetaCard label="类型" value={poster.genre} />
-                <MetaCard label="地区" value={poster.region} />
+                <MetaCard label="导演" value={poster.director ?? poster.region} />
+                <MetaCard label="上映" value={poster.releaseDate ?? poster.year} />
                 <MetaCard label="构图" value={poster.attributes.composition} />
+                <MetaCard label="来源" value={poster.imdbId ?? poster.region} />
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-900/8 bg-slate-50 p-5">

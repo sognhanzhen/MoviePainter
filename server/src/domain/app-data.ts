@@ -31,13 +31,18 @@ export type PosterRecord = {
     tone: string;
   };
   description: string;
+  director?: string;
   genre: string;
   id: string;
   imageUrl: string;
+  imdbId?: string;
   layout: "featured" | "square" | "tall" | "wide";
+  posterCount?: number;
   region: string;
+  releaseDate?: string;
   summary: string;
   tags: string[];
+  tmdbId?: string;
   title: string;
   year: string;
 };
@@ -117,7 +122,7 @@ export type UserProfileRecord = {
 
 export type WorkspaceGenerationInput = {
   mode: WorkspaceMode;
-  modelId?: "doubao-seedance-5" | "nano-banana-2";
+  modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
   moduleWeights: Record<string, number>;
   posterId: string;
   prompt: string;
@@ -139,7 +144,7 @@ export type WorkspaceAssetRecordInput = {
 export type WorkspaceGenerationTask = {
   appliedModules: string[];
   id: string;
-  modelId?: "doubao-seedance-5" | "nano-banana-2";
+  modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
   mode: WorkspaceMode;
   moduleWeights: Record<string, number>;
   posterId: string;
