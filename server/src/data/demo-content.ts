@@ -1,5 +1,5 @@
-import type { HistoryRecord, PosterRecord } from "../domain/app-data";
-import { curatedMoviePosterRecords } from "./curated-movie-posters";
+import type { HistoryRecord, PosterRecord } from "../domain/app-data.js";
+import { curatedMoviePosterRecords } from "./curated-movie-posters.js";
 
 const legacyDemoPosterRecords: PosterRecord[] = [
   {

@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import type { AuthenticatedUser } from "../domain/app-data";
-import { verifyToken } from "../lib/token";
+import type { AuthenticatedUser } from "../domain/app-data.js";
+import { verifyToken } from "../lib/token.js";
 
 export type AuthRequest = Request & {
   authUser?: AuthenticatedUser;

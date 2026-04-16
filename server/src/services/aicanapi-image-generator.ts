@@ -3,7 +3,7 @@ import type {
   WorkspaceGeneratedResult,
   WorkspaceGenerationInput,
   WorkspaceMode
-} from "../domain/app-data";
+} from "../domain/app-data.js";
 
 export type AicanapiImageGeneratorConfig = {
   baseUrl: string;

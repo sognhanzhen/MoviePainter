@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
-import type { LocalDatabase } from "../lib/local-database";
-import { createToken } from "../lib/token";
+import type { LocalDatabase } from "../lib/local-database.js";
+import { createToken } from "../lib/token.js";
 
 const registerSchema = z.object({
   name: z.string().min(2, "用户名至少 2 个字符"),

@@ -1,5 +1,5 @@
-import { demoHistoryRecords, demoPosterRecords } from "./demo-content";
-import type { PosterRecord, WorkspaceMode } from "../domain/app-data";
+import { demoHistoryRecords, demoPosterRecords } from "./demo-content.js";
+import type { PosterRecord, WorkspaceMode } from "../domain/app-data.js";
 
 const adminUsers = [
   {

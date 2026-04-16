@@ -14,9 +14,9 @@ import type {
   WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
-} from "../domain/app-data";
-import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
-import type { AppDataProvider } from "./app-data-provider";
+} from "../domain/app-data.js";
+import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator.js";
+import type { AppDataProvider } from "./app-data-provider.js";
 
 type CreateSupabaseAppDataProviderInput = {
   fallback: AppDataProvider;

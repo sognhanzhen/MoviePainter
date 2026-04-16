@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from "express";
 import { Router } from "express";
-import { createAdminDashboardResponse } from "../data/placeholder-content";
-import { getAuthUser } from "../middleware/auth";
+import { createAdminDashboardResponse } from "../data/placeholder-content.js";
+import { getAuthUser } from "../middleware/auth.js";
 
 type CreateAdminRouterInput = {
   authMiddleware: RequestHandler;

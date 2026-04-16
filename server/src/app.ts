@@ -1,14 +1,14 @@
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { serverConfig } from "./config";
-import { createLocalDatabase } from "./lib/local-database";
-import { createAuthMiddleware } from "./middleware/auth";
-import { createAppDataProvider } from "./providers/app-data-provider";
-import { createAdminRouter } from "./routes/admin";
-import { createAppDataRouter } from "./routes/app-data";
-import { createAuthRouter } from "./routes/auth";
-import { createWorkspaceRouter } from "./routes/workspace";
-import { createPosterSyncRouter } from "./routes/poster-sync";
+import { serverConfig } from "./config.js";
+import { createLocalDatabase } from "./lib/local-database.js";
+import { createAuthMiddleware } from "./middleware/auth.js";
+import { createAppDataProvider } from "./providers/app-data-provider.js";
+import { createAdminRouter } from "./routes/admin.js";
+import { createAppDataRouter } from "./routes/app-data.js";
+import { createAuthRouter } from "./routes/auth.js";
+import { createWorkspaceRouter } from "./routes/workspace.js";
+import { createPosterSyncRouter } from "./routes/poster-sync.js";
 
 export function createApp() {
   const app = express();

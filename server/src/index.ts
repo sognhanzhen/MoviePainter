@@ -1,3 +1,3 @@
-import { startMoviePainterServer } from "./next-server";
+import { startMoviePainterServer } from "./next-server.js";
 
 void startMoviePainterServer({ dev: false });

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { Request, RequestHandler, Response } from "express";
-import { getAuthUser } from "../middleware/auth";
-import { TmdbPosterFetcher } from "../services/tmdb-poster-fetcher";
-import { serverConfig } from "../config";
+import { getAuthUser } from "../middleware/auth.js";
+import { TmdbPosterFetcher } from "../services/tmdb-poster-fetcher.js";
+import { serverConfig } from "../config.js";
 
 export function createPosterSyncRouter() {
   const router = Router();

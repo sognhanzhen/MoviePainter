@@ -1,4 +1,4 @@
-import { demoPosterRecords } from "../data/demo-content";
+import { demoPosterRecords } from "../data/demo-content.js";
 import type {
   AuthenticatedUser,
   HistoryRecord,
@@ -12,9 +12,9 @@ import type {
   WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
-} from "../domain/app-data";
-import type { LocalDatabase } from "../lib/local-database";
-import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
+} from "../domain/app-data.js";
+import type { LocalDatabase } from "../lib/local-database.js";
+import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator.js";
 
 type CreateLocalAppDataProviderInput = {
   database: LocalDatabase;

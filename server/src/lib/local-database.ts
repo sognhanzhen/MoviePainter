@@ -10,7 +10,7 @@ import type {
   HistoryRecordDetail,
   UserSettingsInput,
   UserSettingsRecord
-} from "../domain/app-data";
+} from "../domain/app-data.js";
 
 type UserRow = {
   created_at: string;

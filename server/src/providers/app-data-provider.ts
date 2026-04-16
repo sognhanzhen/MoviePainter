@@ -11,11 +11,11 @@ import type {
   WorkspaceAssetRecordResponse,
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
-} from "../domain/app-data";
-import type { LocalDatabase } from "../lib/local-database";
-import type { AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator";
-import { createLocalAppDataProvider } from "./local-app-data-provider";
-import { createSupabaseAppDataProvider } from "./supabase-app-data-provider";
+} from "../domain/app-data.js";
+import type { LocalDatabase } from "../lib/local-database.js";
+import type { AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator.js";
+import { createLocalAppDataProvider } from "./local-app-data-provider.js";
+import { createSupabaseAppDataProvider } from "./supabase-app-data-provider.js";
 
 export type AppDataProvider = {
   generateWorkspace: (input: { generation: WorkspaceGenerationInput; user: AuthenticatedUser }) => Promise<ProviderResult<WorkspaceGenerationResponse>>;

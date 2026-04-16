@@ -1,4 +1,4 @@
-import type { PosterRecord } from "../domain/app-data";
+import type { PosterRecord } from "../domain/app-data.js";
 
 type ImportedMoviePoster = {
   director: string;

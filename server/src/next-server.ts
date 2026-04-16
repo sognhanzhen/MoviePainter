@@ -1,9 +1,9 @@
 import http from "node:http";
 import { parse } from "node:url";
 import next from "next";
-import "./env";
-import { createApp } from "./app";
-import { workspaceRoot } from "./env";
+import "./env.js";
+import { createApp } from "./app.js";
+import { workspaceRoot } from "./env.js";
 
 type NextFactory = (options: { dev: boolean; dir: string; hostname: string; port: number }) => {
   getRequestHandler: () => (req: http.IncomingMessage, res: http.ServerResponse, parsedUrl?: ReturnType<typeof parse>) => Promise<void>;

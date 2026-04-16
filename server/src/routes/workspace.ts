@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Request, RequestHandler, Response } from "express";
-import { getAuthUser } from "../middleware/auth";
-import type { AppDataProvider } from "../providers/app-data-provider";
+import { getAuthUser } from "../middleware/auth.js";
+import type { AppDataProvider } from "../providers/app-data-provider.js";
 
 const moduleKeys = ["character", "style", "mood", "tone", "composition", "ratio"] as const;
 

@@ -1,8 +1,8 @@
 import type { Request, RequestHandler, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
-import type { AppDataProvider } from "../providers/app-data-provider";
-import { getAuthUser } from "../middleware/auth";
+import type { AppDataProvider } from "../providers/app-data-provider.js";
+import { getAuthUser } from "../middleware/auth.js";
 
 const settingsSchema = z.object({
   displayName: z.string().min(2, "展示名称至少 2 个字符"),

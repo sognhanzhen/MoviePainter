@@ -1,5 +1,5 @@
 import path from "node:path";
-import { serverRoot, workspaceRoot } from "./env";
+import { serverRoot, workspaceRoot } from "./env.js";
 
 function resolveDatabasePath(databasePath?: string) {
   if (process.env.VERCEL) {
