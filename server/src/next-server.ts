@@ -2,7 +2,7 @@ import http from "node:http";
 import { parse } from "node:url";
 import next from "next";
 import "./env.js";
-import { createApp } from "./app.js";
+import apiApp from "./app.js";
 import { workspaceRoot } from "./env.js";
 
 type NextFactory = (options: { dev: boolean; dir: string; hostname: string; port: number }) => {
@@ -26,7 +26,6 @@ export async function startMoviePainterServer({ dev }: StartServerOptions) {
   });
 
   const handle = nextApp.getRequestHandler();
-  const apiApp = createApp();
 
   await nextApp.prepare();
 

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { createApp } from "../../server/src/app";
+import app from "../../server/src/app.js";
 
 export const config = {
   api: {
@@ -7,8 +7,6 @@ export const config = {
     externalResolver: true
   }
 };
-
-const app = createApp();
 
 export default function apiHandler(req: NextApiRequest, res: NextApiResponse) {
   app(req, res);
