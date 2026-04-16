@@ -5,6 +5,7 @@ import { PosterDetailModal } from "../components/PosterDetailModal";
 import { PosterMosaicCard } from "../components/PosterMosaicCard";
 import type { PosterRecord, WorkspaceMode } from "../data/posters";
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
+import { appDataRequest } from "../lib/api";
 import { recordWorkspaceAssetUse } from "../lib/workspace-assets";
 
 const genreLabelMap: Record<string, string> = {
@@ -61,7 +62,82 @@ export function LibraryPage() {
   const [selectedPoster, setSelectedPoster] = useState<PosterRecord | null>(null);
   const [selectingMode, setSelectingMode] = useState(false);
   const { error, loading, posters } = usePosterCatalog(token);
+  const [visiblePage, setVisiblePage] = useState(1);
+  const VISIBLE_PER_PAGE = 32;
   const filtersRef = useRef<HTMLDivElement | null>(null);
+
+  const [tmdbPage, setTmdbPage] = useState(1);
+  const [tmdbPosters, setTmdbPosters] = useState<PosterRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem("moviepainter-tmdb-catalog");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [syncingTmdb, setSyncingTmdb] = useState(false);
+  const [hasMoreTmdb, setHasMoreTmdb] = useState(true);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTmdbPage() {
+      if (!token) return;
+      setSyncingTmdb(true);
+      try {
+        const response = await appDataRequest.syncTmdbPosters(token, tmdbPage);
+        if (cancelled) return;
+        
+        if (response.movies && response.movies.length > 0) {
+          const mapped: PosterRecord[] = response.movies.map((m: any) => ({
+             id: `tmdb-${m.tmdbId}`,
+             title: m.title || "Unknown",
+             summary: m.overview || "No description available.",
+             genre: m.genre || "Drama",
+             year: m.year || new Date().getFullYear().toString(),
+             director: m.director || "Unknown",
+             imageUrl: m.posterUrl || "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80",
+             region: "tmdb",
+             layout: "tall",
+             tags: m.fullGenre ? m.fullGenre.split(" / ") : [],
+             attributes: {
+               character: "未知",
+               composition: "居中",
+               mood: "未知",
+               ratio: "2:3",
+               style: "写实",
+               tone: "未知"
+             },
+             description: "TMDB Sync Data"
+          }));
+          setTmdbPosters((prev) => {
+             const existingIds = new Set(prev.map((p) => p.id));
+             const newItems = mapped.filter((p) => !existingIds.has(p.id));
+             const updated = [...prev, ...newItems];
+             try {
+               // Only cache the first page or max 40 posters so we don't blow localStorage
+               localStorage.setItem("moviepainter-tmdb-catalog", JSON.stringify(updated.slice(0, 40)));
+             } catch {}
+             return updated;
+          });
+        } else {
+          setHasMoreTmdb(false);
+        }
+      } catch (err) {
+        setHasMoreTmdb(false);
+      } finally {
+        if (!cancelled) setSyncingTmdb(false);
+      }
+    }
+    
+    if (tmdbPage > 0) {
+      void loadTmdbPage();
+    }
+    return () => { cancelled = true; };
+  }, [tmdbPage, token]);
+
+  const allPosters = useMemo(() => [...posters, ...tmdbPosters], [posters, tmdbPosters]);
 
   useEffect(() => {
     if (!openFilter) {
@@ -90,16 +166,40 @@ export function LibraryPage() {
   }, [openFilter]);
 
   const filterDefinitions = useMemo(() => {
-    return buildFilterDefinitions(posters);
-  }, [posters]);
+    return buildFilterDefinitions(allPosters);
+  }, [allPosters]);
 
   const visiblePosters = useMemo(() => {
-    return posters.filter((poster) => {
+    return allPosters.filter((poster) => {
       return matchesFilters(poster, activeFilters);
     });
-  }, [activeFilters, posters]);
+  }, [activeFilters, allPosters]);
   const hasActiveFilter = Object.values(activeFilters).some((value) => value !== "all");
   const displayPosters = hasActiveFilter ? visiblePosters : padPosterRow(visiblePosters);
+  const paginatedPosters = useMemo(() => displayPosters.slice(0, visiblePage * VISIBLE_PER_PAGE), [displayPosters, visiblePage]);
+  const hasMoreLocal = paginatedPosters.length < displayPosters.length;
+
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        if (hasMoreLocal) {
+          setVisiblePage(p => p + 1);
+        } else if (hasMoreTmdb && !syncingTmdb) {
+          setTmdbPage((prev) => prev + 1);
+        }
+      }
+    });
+    return () => observerRef.current?.disconnect();
+  }, [hasMoreLocal, hasMoreTmdb, syncingTmdb]);
+
+  const lastElementRef = (node: HTMLElement | null) => {
+    if (loading || syncingTmdb) return;
+    if (observerRef.current) observerRef.current.disconnect();
+    if (node) {
+      observerRef.current?.observe(node);
+    }
+  };
+
 
   function openPoster(poster: PosterRecord) {
     setSelectedPoster(poster);
@@ -181,7 +281,7 @@ export function LibraryPage() {
         </section>
       ) : visiblePosters.length > 0 ? (
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
-          {displayPosters.map((poster, index) => (
+          {paginatedPosters.map((poster, index) => (
             <PosterMosaicCard
               key={`${poster.id}-${index}`}
               poster={poster}
@@ -197,13 +297,24 @@ export function LibraryPage() {
         </section>
       )}
 
-      <div className="mt-20 flex justify-center">
-        <button
-          type="button"
-          className="cursor-pointer rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 py-4 font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-[#410001] uppercase shadow-lg shadow-[#e50914]/20 transition hover:scale-105 active:scale-95"
-        >
-          Discover More Work
-        </button>
+      <div className="mt-20 flex justify-center" ref={lastElementRef}>
+        {(syncingTmdb || hasMoreLocal) ? (
+          <div className="flex items-center gap-3 space-x-2">
+            <div className="h-2 w-2 animate-bounce rounded-full bg-[#ffb4aa]"></div>
+            <div className="h-2 w-2 animate-bounce rounded-full bg-[#ffb4aa] [animation-delay:0.2s]"></div>
+            <div className="h-2 w-2 animate-bounce rounded-full bg-[#ffb4aa] [animation-delay:0.4s]"></div>
+          </div>
+        ) : hasMoreTmdb && !hasMoreLocal ? (
+          <button
+            type="button"
+            onClick={() => setTmdbPage(prev => prev + 1)}
+            className="cursor-pointer rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 py-4 font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-[#410001] uppercase shadow-lg shadow-[#e50914]/20 transition hover:scale-105 active:scale-95"
+          >
+            Discover More Work
+          </button>
+        ) : (
+          <p className="text-sm font-bold tracking-[0.1em] text-neutral-500 uppercase">You've reached the end</p>
+        )}
       </div>
 
       <footer className="mt-24 flex flex-col items-center justify-between gap-8 border-t border-white/5 py-10 md:flex-row">

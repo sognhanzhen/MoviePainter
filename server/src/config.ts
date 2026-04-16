@@ -52,6 +52,9 @@ export const serverConfig = {
   aicanapiImageApiStyle: readEnv("AICANAPI_IMAGE_API_STYLE", "MODELGATE_IMAGE_API_STYLE"),
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   databasePath: resolveDatabasePath(process.env.DATABASE_PATH),
+  dashscopeApiKey: process.env.DASHSCOPE_API_KEY ?? "",
+  dashscopeBaseUrl: process.env.DASHSCOPE_BASE_URL ?? "https://dashscope.aliyuncs.com/api/v1",
+  dashscopeWanImageModel: process.env.DASHSCOPE_WAN_IMAGE_MODEL ?? "wan2.7-image-pro",
   jwtSecret: process.env.JWT_SECRET ?? "dev-secret-change-me",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   supabaseUrl: process.env.SUPABASE_URL ?? ""

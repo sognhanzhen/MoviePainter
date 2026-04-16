@@ -12,6 +12,9 @@ export type AicanapiImageGeneratorConfig = {
   geminiApiKey: string;
   geminiImageModel: string;
   imageApiStyle: string;
+  dashscopeApiKey: string;
+  dashscopeBaseUrl: string;
+  dashscopeWanImageModel: string;
 };
 
 type GenerateWorkspaceImagesInput = {
@@ -32,7 +35,7 @@ type ResolvedModel = {
   apiKey: string;
   externalModel: string;
   label: string;
-  provider: "doubao" | "gemini";
+  provider: "doubao" | "gemini" | "dashscope";
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -50,30 +53,81 @@ export async function generateWorkspaceImages({
   results: WorkspaceGeneratedResult[];
   width: number;
 }> {
-  const model = resolveModel(config, generation);
-  const apiStyle = resolveImageApiStyle(config);
+  const initialModel = resolveModel(config, generation);
   const aspectRatio = resolveAspectRatio(generation.ratioId ?? poster.attributes.ratio);
-  const size = apiStyle === "modelgate" ? resolveModelGateImageSize(aspectRatio, model.provider) : resolveOpenAiImageSize(aspectRatio);
-  const prompt = buildImagePrompt({ aspectRatio, generation, model, poster });
-  const outputs =
-    apiStyle === "modelgate"
-      ? await generateWithModelGate({
-          count: IMAGE_OUTPUT_COUNT,
-          model,
-          prompt,
-          size,
-          url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
-        })
-      : model.provider === "gemini"
-      ? await generateWithGemini({ aspectRatio, count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: resolveBaseUrl(config.baseUrl) })
-      : await generateWithOpenAiImages({
-          count: IMAGE_OUTPUT_COUNT,
-          model,
-          prompt,
-          size,
-          url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
-        });
-  const results = outputs.map((output, index) => ({
+
+  async function performGeneration(model: ResolvedModel) {
+    const apiStyle = resolveImageApiStyle(config);
+    const size =
+      model.provider === "dashscope"
+        ? resolveDashScopeSize(aspectRatio)
+        : apiStyle === "modelgate"
+        ? resolveModelGateImageSize(aspectRatio, model.provider)
+        : resolveOpenAiImageSize(aspectRatio);
+    const prompt = buildImagePrompt({ aspectRatio, generation, model, poster });
+
+    if (model.provider === "dashscope") {
+      return { outputs: await generateWithDashScope({ count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: config.dashscopeBaseUrl }), size };
+    }
+
+    const outputs =
+      apiStyle === "modelgate"
+        ? await generateWithModelGate({
+            count: IMAGE_OUTPUT_COUNT,
+            model,
+            prompt,
+            size,
+            url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
+          })
+        : model.provider === "gemini"
+        ? await generateWithGemini({ aspectRatio, count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: resolveBaseUrl(config.baseUrl) })
+        : await generateWithOpenAiImages({
+            count: IMAGE_OUTPUT_COUNT,
+            model,
+            prompt,
+            size,
+            url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
+          });
+    return { outputs, size };
+  }
+
+  let finalOutputs: ImageGenerationOutput[];
+  let finalSize: ResolvedSize;
+  let finalModelLabel = initialModel.label;
+
+  try {
+    const res = await performGeneration(initialModel);
+    finalOutputs = res.outputs;
+    finalSize = res.size;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const isSensitive = errorMsg.includes("415") || errorMsg.includes("sensitive content");
+
+    if (initialModel.provider !== "dashscope" && !isSensitive) {
+      console.log(`[ImageGen] ${initialModel.provider} 失败，尝试 fallback 到万相。原因: ${errorMsg}`);
+      const fallbackModel = resolveModel(config, { ...generation, modelId: "wan2.7-image-pro" } as unknown as WorkspaceGenerationInput);
+      try {
+        const res = await performGeneration(fallbackModel);
+        finalOutputs = res.outputs;
+        finalSize = res.size;
+        finalModelLabel = fallbackModel.label;
+      } catch (fallbackError) {
+        throw new Error(
+          `模型调用失败。首选模型出错: ${toErrorMessage(error)}；备用万相模型也出错: ${toErrorMessage(fallbackError)}`
+        );
+      }
+    } else {
+      if (isSensitive) {
+        throw new Error(`输入提示可能包含敏感内容被拒 (415)，请修改提示词或更换参考海报再试。错误详细: ${errorMsg}`);
+      }
+      if (errorMsg.includes("503") || errorMsg.includes("逆向分组")) {
+        throw new Error(`当前提供商负载过高 (503)，请稍后重试或更换为其他生图模型。详细: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
+
+  const results = finalOutputs.map((output, index) => ({
     id: `result-${generation.mode}-${poster.id}-${Date.now()}-${index + 1}`,
     imageUrl: output.imageUrl,
     summary: output.summary,
@@ -81,22 +135,22 @@ export async function generateWorkspaceImages({
   }));
 
   return {
-    height: size.height,
+    height: finalSize.height,
     insight:
       generation.mode === "chat"
-        ? `${model.label} 已生成 ${results.length} 张图。`
-        : `${model.label} 已生成 ${results.length} 张图。`,
+        ? `${finalModelLabel} 已生成 ${results.length} 张图。生图过程会自动保存。`
+        : `${finalModelLabel} 已生成 ${results.length} 张图。`,
     results,
-    width: size.width
+    width: finalSize.width
   };
 }
 
 function resolveModel(config: AicanapiImageGeneratorConfig, generation: WorkspaceGenerationInput): ResolvedModel {
-  const requestedModel = generation.modelId === "nano-banana-2" ? "nano-banana-2" : "doubao-seedance-5";
+  const requestedModel = generation.modelId;
 
   if (requestedModel === "nano-banana-2") {
     assertConfigured(config.baseUrl, "AICANAPI_BASE_URL");
-    assertConfigured(config.geminiApiKey, "AICANAPI_GEMINI_API_KEY 或 AICANAPI_API_KEY");
+    assertConfigured(config.geminiApiKey, "AICANAPI_GEMINI_API_KEY");
     assertConfigured(config.geminiImageModel, "AICANAPI_GEMINI_IMAGE_MODEL");
 
     return {
@@ -107,8 +161,21 @@ function resolveModel(config: AicanapiImageGeneratorConfig, generation: Workspac
     };
   }
 
+  if (requestedModel === "wan2.7-image-pro") {
+    assertConfigured(config.dashscopeBaseUrl, "DASHSCOPE_BASE_URL");
+    assertConfigured(config.dashscopeApiKey, "DASHSCOPE_API_KEY");
+    assertConfigured(config.dashscopeWanImageModel, "DASHSCOPE_WAN_IMAGE_MODEL");
+
+    return {
+      apiKey: config.dashscopeApiKey,
+      externalModel: config.dashscopeWanImageModel,
+      label: "Qwen 万相 2.7 Pro",
+      provider: "dashscope"
+    };
+  }
+
   assertConfigured(config.baseUrl, "AICANAPI_BASE_URL");
-  assertConfigured(config.doubaoApiKey, "AICANAPI_DOUBAO_API_KEY 或 AICANAPI_API_KEY");
+  assertConfigured(config.doubaoApiKey, "AICANAPI_DOUBAO_API_KEY");
   assertConfigured(config.doubaoImageModel, "AICANAPI_DOUBAO_IMAGE_MODEL");
 
   return {
@@ -224,6 +291,82 @@ async function generateWithModelGate(input: {
   }
 
   return outputs;
+}
+
+async function generateWithDashScope(input: {
+  count: number;
+  model: ResolvedModel;
+  prompt: string;
+  size: ResolvedSize;
+  url: string;
+}): Promise<ImageGenerationOutput[]> {
+  const apiUrl = `${input.url}/services/aigc/text2image/image-synthesis`;
+  const headers = {
+    Authorization: `Bearer ${input.model.apiKey}`,
+    "Content-Type": "application/json",
+    "X-DashScope-Async": "enable"
+  };
+  const payload = {
+    model: input.model.externalModel,
+    input: { prompt: input.prompt },
+    parameters: {
+      size: input.size.value,
+      n: input.count
+    }
+  };
+
+  const initialResponse = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+  const initialData = await initialResponse.json();
+
+  if (!initialResponse.ok || !initialData.output || !initialData.output.task_id) {
+    throw new Error(`DashScope 提交任务失败 (${initialResponse.status}): ${JSON.stringify(initialData)}`);
+  }
+
+  const taskId = initialData.output.task_id;
+  const taskUrl = `${input.url}/tasks/${taskId}`;
+
+  let attempts = 0;
+  const maxAttempts = 30; // Max 60 seconds (2s per delay)
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    attempts += 1;
+
+    const pollResponse = await fetch(taskUrl, { headers });
+    const pollData = await pollResponse.json();
+
+    if (!pollResponse.ok) {
+      throw new Error(`DashScope 轮询任务失败: ${JSON.stringify(pollData)}`);
+    }
+
+    const output = pollData.output;
+    if (!output) continue;
+
+    if (output.task_status === "SUCCEEDED") {
+      const results = output.results;
+      if (!Array.isArray(results) || results.length === 0) {
+        throw new Error("DashScope 任务成功，但未返回结果");
+      }
+
+      return results.map((result: any, index: number) => ({
+        height: input.size.height,
+        imageUrl: result.url,
+        summary: `${input.model.label} 输出 ${index + 1}`,
+        title: `生成图 ${index + 1}`,
+        width: input.size.width
+      }));
+    }
+
+    if (output.task_status === "FAILED" || output.task_status === "UNKNOWN") {
+      throw new Error(`DashScope 任务失败: ${output.code} - ${output.message}`);
+    }
+  }
+
+  throw new Error("DashScope 生成任务超时");
 }
 
 async function generateWithGeminiNative(input: {
@@ -617,6 +760,17 @@ function resolveModelGateImageSize(aspectRatio: string, provider: ResolvedModel[
   };
 
   return sizeByRatio[aspectRatio] ?? sizeByRatio["1:1"];
+}
+
+function resolveDashScopeSize(aspectRatio: string): ResolvedSize {
+  const sizeByRatio: Record<string, ResolvedSize> = {
+    "1:1": { height: 1024, value: "1024*1024", width: 1024 },
+    "3:4": { height: 1296, value: "768*1024", width: 768 },
+    "4:3": { height: 768, value: "1024*768", width: 1024 },
+    "9:16": { height: 1296, value: "720*1280", width: 720 },
+    "16:9": { height: 720, value: "1280*720", width: 1280 }
+  };
+  return sizeByRatio[aspectRatio] ?? { height: 1024, value: "1024*1024", width: 1024 };
 }
 
 function resolveAspectRatio(value: string | undefined) {

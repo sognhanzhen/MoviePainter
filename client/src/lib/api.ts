@@ -152,6 +152,11 @@ export const appDataRequest = {
       token
     });
   },
+  async syncTmdbPosters(token: string, page: number = 1) {
+    return request<{ message: string; count: number; movies: any[] }>(`/posters/sync-tmdb?page=${page}`, {
+      token
+    });
+  },
   async getSettings(token: string) {
     return request<SettingsResponse>("/settings", {
       token
@@ -187,7 +192,7 @@ export const workspaceRequest = {
     token: string,
     payload: {
       mode: "chat" | "draw";
-      modelId?: "doubao-seedance-5" | "nano-banana-2";
+      modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
       moduleWeights: Record<string, number>;
       posterId: string;
       prompt: string;

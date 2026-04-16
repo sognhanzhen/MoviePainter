@@ -8,10 +8,10 @@ const moduleKeys = ["character", "style", "mood", "tone", "composition", "ratio"
 
 const generateSchema = z.object({
   mode: z.enum(["chat", "draw"]),
-  modelId: z.enum(["doubao-seedance-5", "nano-banana-2"]).optional(),
+  modelId: z.enum(["doubao-seedance-5", "nano-banana-2", "wan2.7-image-pro"]).optional(),
   moduleWeights: z.record(z.string(), z.number().min(0).max(100)).default({}),
   posterId: z.string().min(1, "缺少参考海报"),
-  prompt: z.string().min(8, "请输入更完整的生成描述"),
+  prompt: z.string().min(2, "请输入生成描述"),
   ratioId: z.string().min(1).optional(),
   selectedModules: z.array(z.enum(moduleKeys)).default([]),
   sourceOrigin: z.string().min(1).optional()

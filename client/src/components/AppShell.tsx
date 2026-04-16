@@ -14,7 +14,7 @@ export function AppShell() {
   const location = useLocation();
   const isWorkspace = location.pathname === "/workspace";
   const isCinematicShell =
-    location.pathname === "/workspace" || location.pathname === "/library" || location.pathname === "/history";
+    location.pathname === "/workspace" || location.pathname === "/library" || location.pathname.startsWith("/history");
 
   const shellClassName = isCinematicShell
     ? "relative min-h-screen overflow-x-hidden bg-[#0d0e0d] text-neutral-100"

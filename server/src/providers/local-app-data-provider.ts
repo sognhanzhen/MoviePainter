@@ -28,11 +28,7 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
         throw new Error("本地兜底链路只支持 local JWT 用户");
       }
 
-      const poster = demoPosterRecords.find((entry) => entry.id === input.generation.posterId) ?? null;
-
-      if (!poster) {
-        throw new Error("参考海报不存在");
-      }
+      const poster = demoPosterRecords.find((entry) => entry.id === input.generation.posterId) ?? buildFallbackPoster(input.generation.posterId, input.generation.prompt);
 
       const generated = await generateWorkspaceImages({
         config: imageGeneratorConfig,
@@ -185,11 +181,7 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
         throw new Error("本地兜底链路只支持 local JWT 用户");
       }
 
-      const poster = demoPosterRecords.find((entry) => entry.id === input.asset.posterId) ?? null;
-
-      if (!poster) {
-        throw new Error("参考海报不存在");
-      }
+      const poster = demoPosterRecords.find((entry) => entry.id === input.asset.posterId) ?? buildFallbackPoster(input.asset.posterId, input.asset.prompt ?? "");
 
       const record = database.createGenerationRecord({
         mode: input.asset.mode,
@@ -263,4 +255,27 @@ function buildWorkspaceResults(input: {
             : `第四版会进一步压缩无效元素，强化画面的传播性和主视觉记忆点。`,
     title: `${input.poster.title} - ${input.generation.mode === "chat" ? "对话提案" : "参数方案"} ${index + 1}`
   }));
+}
+
+function buildFallbackPoster(id: string, prompt: string): PosterRecord {
+  return {
+    id: id || "free-prompt",
+    title: prompt.substring(0, 30) || "Free Prompt",
+    summary: prompt || "User-defined free prompt generation without a reference poster.",
+    genre: "剧情",
+    year: new Date().getFullYear().toString(),
+    region: "global",
+    imageUrl: "",
+    layout: "tall",
+    tags: [],
+    description: "Auto-generated fallback poster for free prompt mode.",
+    attributes: {
+      character: "自由创作",
+      composition: "居中",
+      mood: "自由",
+      ratio: "2:3",
+      style: "写实",
+      tone: "自然"
+    }
+  };
 }

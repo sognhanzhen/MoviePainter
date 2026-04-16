@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "COPYFILE_DISABLE=1 tsx watch --ignore ../.next src/dev.ts",
+    "dev": "tsx watch --ignore ../.next src/dev.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck",
-    "start": "COPYFILE_DISABLE=1 tsx src/index.ts",
+    "start": "tsx src/index.ts",
     "db:init": "node scripts/init-db.mjs"
   },
   "dependencies": {

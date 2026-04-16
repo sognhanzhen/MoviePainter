@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PosterRecord } from "../data/posters";
 
 const layoutClassMap: Record<PosterRecord["layout"], string> = {
@@ -24,6 +25,8 @@ export function PosterMosaicCard({
   selected = false,
   showMeta = true
 }: PosterMosaicCardProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <article
       className={`group relative overflow-hidden rounded-lg bg-[#181918] text-left transition duration-500 ${
@@ -40,12 +43,21 @@ export function PosterMosaicCard({
       >
         <span className="sr-only">选择海报 {poster.title}</span>
       </button>
-      <img
-        src={poster.imageUrl}
-        alt={poster.title}
-        loading="lazy"
-        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-      />
+      {imgFailed ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#2a1a2e] via-[#1a1a2e] to-[#0d1117] p-4 text-center">
+          <span className="text-3xl">🎬</span>
+          <p className="mt-3 font-[var(--font-display)] text-sm font-bold leading-tight text-white/80">{poster.title}</p>
+          <p className="mt-1 text-[10px] tracking-widest text-[#ffb4aa]/60 uppercase">{poster.genre}</p>
+        </div>
+      ) : (
+        <img
+          src={poster.imageUrl}
+          alt={poster.title}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+          onError={() => setImgFailed(true)}
+        />
+      )}
       {showMeta ? (
         <>
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/18 to-transparent" />

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PosterRecord, WorkspaceMode } from "../data/posters";
 
 type PosterDetailModalProps = {
@@ -13,6 +14,8 @@ export function PosterDetailModal({
   poster,
   selectingMode
 }: PosterDetailModalProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-8 backdrop-blur-sm">
       <div className="relative w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/40 bg-white shadow-2xl shadow-slate-950/25">
@@ -26,7 +29,20 @@ export function PosterDetailModal({
 
         <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="min-h-[420px] bg-slate-950">
-            <img src={poster.imageUrl} alt={poster.title} className="h-full w-full object-cover" />
+            {imgFailed ? (
+              <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#2a1a2e] via-[#1a1a2e] to-[#0d1117] p-8 text-center">
+                <span className="text-5xl">🎬</span>
+                <p className="mt-4 font-[var(--font-display)] text-xl font-bold text-white/80">{poster.title}</p>
+                <p className="mt-2 text-sm tracking-widest text-[#ffb4aa]/70 uppercase">{poster.genre} / {poster.year}</p>
+              </div>
+            ) : (
+              <img
+                src={poster.imageUrl}
+                alt={poster.title}
+                className="h-full w-full object-cover"
+                onError={() => setImgFailed(true)}
+              />
+            )}
           </div>
 
           <div className="flex flex-col justify-between gap-8 p-8 sm:p-10">

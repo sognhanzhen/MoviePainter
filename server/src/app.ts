@@ -8,6 +8,7 @@ import { createAdminRouter } from "./routes/admin";
 import { createAppDataRouter } from "./routes/app-data";
 import { createAuthRouter } from "./routes/auth";
 import { createWorkspaceRouter } from "./routes/workspace";
+import { createPosterSyncRouter } from "./routes/poster-sync";
 
 export function createApp() {
   const app = express();
@@ -20,7 +21,10 @@ export function createApp() {
       doubaoImageModel: serverConfig.aicanapiDoubaoImageModel,
       geminiApiKey: serverConfig.aicanapiGeminiApiKey,
       geminiImageModel: serverConfig.aicanapiGeminiImageModel,
-      imageApiStyle: serverConfig.aicanapiImageApiStyle
+      imageApiStyle: serverConfig.aicanapiImageApiStyle,
+      dashscopeApiKey: serverConfig.dashscopeApiKey,
+      dashscopeBaseUrl: serverConfig.dashscopeBaseUrl,
+      dashscopeWanImageModel: serverConfig.dashscopeWanImageModel
     },
     supabaseServiceRoleKey: serverConfig.supabaseServiceRoleKey,
     supabaseUrl: serverConfig.supabaseUrl
@@ -42,10 +46,13 @@ export function createApp() {
   app.use("/api", createAppDataRouter({ authMiddleware, dataProvider }));
   app.use("/api", createWorkspaceRouter({ authMiddleware, dataProvider }));
   app.use("/api", createAdminRouter({ authMiddleware }));
+  app.use("/api/posters", createPosterSyncRouter());
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    console.error(error);
-    res.status(500).json({ message: "服务器内部错误" });
+    console.error("[ServerError]:", error);
+    const message = error instanceof Error ? error.message : "服务器内部错误";
+    const status = message.includes("Unauthorized") || message.includes("未授权") ? 401 : 500;
+    res.status(status).json({ message });
   });
 
   return app;

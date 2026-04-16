@@ -1,68 +1,455 @@
 import type { PosterRecord } from "../domain/app-data";
 
-const importedMoviePosters = [
-  ["inception", "Inception", "tt1375666", "27205", "https://assets.fanart.tv/fanart/inception-52df821bd2a9f.jpg", 31, "Christopher Nolan", "Action / Sci-Fi", "action film / adventure film / drama film / heist film / mystery film / science fiction action film / science fiction film / thriller film", "2010-07-08", "2010"],
-  ["the-matrix", "The Matrix", "tt0133093", "603", "https://assets.fanart.tv/fanart/the-matrix-53b1a283180a1.jpg", 37, "Lana Wachowski / Lilly Wachowski", "Action / Sci-Fi", "action film / action thriller / cyberpunk / dystopian film / film noir / post-apocalyptic film / science fiction film / superhero film / thriller film", "1999-03-31", "1999"],
-  ["parasite", "Parasite", "tt6751668", "496243", "https://assets.fanart.tv/fanart/parasite-5d2d59cb46671.jpg", 13, "Bong Joon-ho", "Black Comedy / Thriller", "black comedy / comedy drama / thriller film", "2019-05-21", "2019"],
-  ["spirited-away", "Spirited Away", "tt0245429", "129", "https://assets.fanart.tv/fanart/spirited-away-53413e0abc9e5.jpg", 18, "Hayao Miyazaki", "Fantasy / Animation", "children's film / coming-of-age film / drama film / fantasy anime and manga / fantasy film / isekai / supernatural anime", "2001-07-20", "2001"],
-  ["the-godfather", "The Godfather", "tt0068646", "238", "https://assets.fanart.tv/fanart/the-godfather-54b308c393048.jpg", 23, "Francis Ford Coppola", "Crime / Drama", "crime drama film / crime film / crime thriller film / drama film / epic film / gangster film / historical drama film / historical film / police procedural film / suspense film / thriller film", "1972-03-15", "1972"],
-  ["pulp-fiction", "Pulp Fiction", "tt0110912", "680", "https://assets.fanart.tv/fanart/pulp-fiction-5229c921ab881.jpg", 22, "Quentin Tarantino", "Crime / Drama", "action film / action thriller / black comedy film / comedy drama / comedy film / crime comedy film / crime drama film / crime film / crime thriller film / drama film / gangster film / independent film / neo-noir / suspense film / thriller film", "1994-05-21", "1994"],
-  ["the-dark-knight", "The Dark Knight", "tt0468569", "155", "https://assets.fanart.tv/fanart/the-dark-knight-551465d577af5.jpg", 50, "Christopher Nolan", "Action / Crime", "action film / crime film / crime thriller film / drama film / neo-noir / superhero film / thriller film", "2008-07-18", "2008"],
-  ["la-la-land", "La La Land", "tt3783958", "313369", "https://assets.fanart.tv/fanart/la-la-land-5831aea494153.jpg", 24, "Damien Chazelle", "Musical / Romance", "comedy drama / comedy film / dance film / drama film / musical film / romance film", "2016-08-31", "2016"],
-  ["mad-max-fury-road", "Mad Max: Fury Road", "tt1392190", "76341", "https://assets.fanart.tv/fanart/mad-max-fury-road-55dbd00d0685b.jpg", 47, "George Miller", "Action / Adventure", "action film / adventure film / dystopian film / post-apocalyptic film / science fiction film", "2015-05-13", "2015"],
-  ["arrival", "Arrival", "tt2543164", "329865", "https://assets.fanart.tv/fanart/arrival-58926ee109e95.jpg", 33, "Denis Villeneuve", "Drama / Sci-Fi", "drama film / mystery film / science fiction film / thriller film", "2016-11-10", "2016"],
-  ["blade-runner-2049", "Blade Runner 2049", "tt1856101", "335984", "https://assets.fanart.tv/fanart/blade-runner-2049-599f083ab57dc.jpg", 30, "Denis Villeneuve", "Sci-Fi / Neo-Noir", "action film / cyberpunk / drama film / dystopian film / mystery film / neo-noir / science fiction film / thriller film", "2017-10-04", "2017"],
-  ["interstellar", "Interstellar", "tt0816692", "157336", "https://assets.fanart.tv/fanart/interstellar-550825f7cc108.jpg", 34, "Christopher Nolan", "Adventure / Sci-Fi", "adventure film / drama film / dystopian film / hard science fiction / science fiction film / thriller film / time-travel film", "2014-10-26", "2014"],
-  ["everything-everywhere-all-at-once", "Everything Everywhere All at Once", "tt6710474", "545611", "https://assets.fanart.tv/fanart/everything-everywhere-all-at-once-624ef81c612d0.jpg", 12, "Dan Kwan / Daniel Scheinert", "Action / Comedy", "absurdist fiction / action film / comedy drama / martial arts film / psychedelic film / science fiction film", "2022-03-11", "2022"],
-  ["dune", "Dune", "tt1160419", "438631", "https://assets.fanart.tv/fanart/dune-6120bd92ee626.jpg", 39, "Denis Villeneuve", "Adventure / Sci-Fi", "action film / adventure film / science fiction film / speculative fiction film", "2021-09-03", "2021"],
-  ["dune-part-two", "Dune: Part Two", "tt15239678", "693134", "https://assets.fanart.tv/fanart/dune-part-two-6457e3e0d8a62.jpg", 21, "Denis Villeneuve", "Adventure / Sci-Fi", "action film / adventure film / epic film / science fiction film / speculative fiction film", "2024-02-27", "2024"],
-  ["the-grand-budapest-hotel", "The Grand Budapest Hotel", "tt2278388", "120467", "https://assets.fanart.tv/fanart/the-grand-budapest-hotel-54ecd7f8a1c8b.jpg", 11, "Wes Anderson", "Comedy / Adventure", "adventure film / comedy film / crime film / drama film / romance film / tragicomedy", "2014-02-06", "2014"],
-  ["her", "Her", "tt1798709", "152601", "https://assets.fanart.tv/fanart/her-53837900e3374.jpg", 7, "Spike Jonze", "Drama / Romance", "arthouse science fiction film / comedy film / drama film / romantic comedy / science fiction film", "2013-10-12", "2013"],
-  ["get-out", "Get Out", "tt5052448", "419430", "https://assets.fanart.tv/fanart/get-out-58bde1a46246e.jpg", 23, "Jordan Peele", "Horror / Thriller", "comedy horror / horror film / mystery film / thriller film", "2017-01-24", "2017"],
-  ["black-swan", "Black Swan", "tt0947798", "44214", "https://assets.fanart.tv/fanart/black-swan-54c15ffcecbdd.jpg", 17, "Darren Aronofsky", "Drama / Thriller", "drama film / horror film / LGBTQ-related film / magic realist film / psychological horror fiction / psychological thriller film / thriller film", "2010-09-01", "2010"],
-  ["moonlight", "Moonlight", "tt4975722", "376867", "https://assets.fanart.tv/fanart/moonlight-588ca7e8d5254.jpg", 4, "Barry Jenkins", "Coming-of-Age / Drama", "coming-of-age film / drama film / LGBTQ-related film", "2016-09-02", "2016"],
-  ["whiplash", "Whiplash", "tt2582802", "244786", "https://assets.fanart.tv/fanart/whiplash-54ec20a38b708.jpg", 10, "Damien Chazelle", "Drama / Music", "drama film / musical film", "2014-01-01", "2014"],
-  ["the-social-network", "The Social Network", "tt1285016", "37799", "https://assets.fanart.tv/fanart/the-social-network-52ed797f9a03e.jpg", 5, "David Fincher", "Biographical / Drama", "biographical film / drama film / trial film", "2010-09-24", "2010"],
-  ["no-country-for-old-men", "No Country for Old Men", "tt0477348", "6977", "https://assets.fanart.tv/fanart/no-country-for-old-men-533335897d05e.jpg", 10, "Ethan Coen / Joel Coen", "Crime / Thriller", "action film / adventure film / contemporary Western film / crime drama film / crime film / crime thriller film / drama film / gangster film / mystery film / neo-noir / psychological drama film / psychological thriller film / suspense film / thriller film / Western film", "2007-05-19", "2007"],
-  ["the-shape-of-water", "The Shape of Water", "tt5580390", "399055", "https://assets.fanart.tv/fanart/the-shape-of-water-5a4e4240b8afd.jpg", 22, "Guillermo del Toro", "Fantasy / Romance", "drama film / fantasy film / magic realist film / melodrama / romance film / thriller film", "2017-08-31", "2017"],
-  ["pans-labyrinth", "Pan's Labyrinth", "tt0457430", "1417", "https://assets.fanart.tv/fanart/pans-labyrinth-554d0987a2fe1.jpg", 18, "Guillermo del Toro", "Fantasy / War", "drama film / fantasy film / teen film / war film", "2006-05-27", "2006"],
-  ["amelie", "Amelie", "tt0211915", "194", "https://assets.fanart.tv/fanart/amlie-532743df76c28.jpg", 6, "Jean-Pierre Jeunet", "Comedy / Romance", "comedy film / drama film / magic realist film / romantic comedy film", "2001-02-28", "2001"],
-  ["crouching-tiger-hidden-dragon", "Crouching Tiger, Hidden Dragon", "tt0190332", "146", "https://assets.fanart.tv/fanart/crouching-tiger-hidden-dragon-530ee772852a3.jpg", 13, "Ang Lee", "Action / Romance", "action film / adventure film / drama film / fantasy film / martial arts film / romance film", "2000-05-18", "2000"],
-  ["the-fellowship-of-the-ring", "The Lord of the Rings: The Fellowship of the Ring", "tt0120737", "120", "https://assets.fanart.tv/fanart/the-lord-of-the-rings-the-fellowship-of-the-ring-522af84750c20.jpg", 43, "Peter Jackson", "Adventure / Fantasy", "action film / adventure film / fantasy film", "2001-12-19", "2001"],
-  ["the-silence-of-the-lambs", "The Silence of the Lambs", "tt0102926", "274", "https://assets.fanart.tv/fanart/the-silence-of-the-lambs-5487909ca88be.jpg", 24, "Jonathan Demme", "Crime / Horror", "crime drama film / crime film / crime thriller film / drama film / horror film / LGBTQ-related film / police procedural film / psychological drama film / psychological horror film / psychological thriller film / thriller film", "1991-01-30", "1991"],
-  ["fight-club", "Fight Club", "tt0137523", "550", "https://assets.fanart.tv/fanart/fight-club-522a5477c7bd3.jpg", 21, "David Fincher", "Drama / Thriller", "drama film / flashback film / psychological thriller / thriller film", "1999-01-01", "1999"]
-] as const;
+type ImportedMoviePoster = {
+  director: string;
+  fullGenre: string;
+  genre: string;
+  id: string;
+  imdbId: string;
+  posterCount: number;
+  posterUrl: string;
+  releaseDate: string;
+  title: string;
+  tmdbId: string;
+  year: string;
+};
+
+const importedMoviePosters: ImportedMoviePoster[] = [
+  {
+    id: "inception",
+    title: "Inception",
+    imdbId: "tt1375666",
+    tmdbId: "27205",
+    posterUrl: "https://image.tmdb.org/t/p/w500/ljsZTbVsrQSqNgAvMoWPI6Pw16s.jpg",
+    posterCount: 31,
+    director: "Christopher Nolan",
+    genre: "Action / Sci-Fi",
+    fullGenre: "action film / adventure film / drama film / heist film / mystery film / science fiction action film / science fiction film / thriller film",
+    releaseDate: "2010-07-08",
+    year: "2010"
+  },
+  {
+    id: "the-matrix",
+    title: "The Matrix",
+    imdbId: "tt0133093",
+    tmdbId: "603",
+    posterUrl: "https://image.tmdb.org/t/p/w500/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg",
+    posterCount: 37,
+    director: "Lana Wachowski / Lilly Wachowski",
+    genre: "Action / Sci-Fi",
+    fullGenre: "action film / action thriller / cyberpunk / dystopian film / film noir / post-apocalyptic film / science fiction film / superhero film / thriller film",
+    releaseDate: "1999-03-31",
+    year: "1999"
+  },
+  {
+    id: "parasite",
+    title: "Parasite",
+    imdbId: "tt6751668",
+    tmdbId: "496243",
+    posterUrl: "https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg",
+    posterCount: 13,
+    director: "Bong Joon-ho",
+    genre: "Black Comedy / Thriller",
+    fullGenre: "black comedy / comedy drama / thriller film",
+    releaseDate: "2019-05-21",
+    year: "2019"
+  },
+  {
+    id: "spirited-away",
+    title: "Spirited Away",
+    imdbId: "tt0245429",
+    tmdbId: "129",
+    posterUrl: "https://image.tmdb.org/t/p/w500/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg",
+    posterCount: 18,
+    director: "Hayao Miyazaki",
+    genre: "Fantasy / Animation",
+    fullGenre: "children's film / coming-of-age film / drama film / fantasy anime and manga / fantasy film / isekai / supernatural anime",
+    releaseDate: "2001-07-20",
+    year: "2001"
+  },
+  {
+    id: "the-godfather",
+    title: "The Godfather",
+    imdbId: "tt0068646",
+    tmdbId: "238",
+    posterUrl: "https://image.tmdb.org/t/p/w500/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+    posterCount: 23,
+    director: "Francis Ford Coppola",
+    genre: "Crime / Drama",
+    fullGenre: "crime drama film / crime film / crime thriller film / drama film / epic film / gangster film / historical drama film / historical film / police procedural film / suspense film / thriller film",
+    releaseDate: "1972-03-15",
+    year: "1972"
+  },
+  {
+    id: "pulp-fiction",
+    title: "Pulp Fiction",
+    imdbId: "tt0110912",
+    tmdbId: "680",
+    posterUrl: "https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg",
+    posterCount: 22,
+    director: "Quentin Tarantino",
+    genre: "Crime / Drama",
+    fullGenre: "action film / action thriller / black comedy film / comedy drama / comedy film / crime comedy film / crime drama film / crime film / crime thriller film / drama film / gangster film / independent film / neo-noir / suspense film / thriller film",
+    releaseDate: "1994-05-21",
+    year: "1994"
+  },
+  {
+    id: "the-dark-knight",
+    title: "The Dark Knight",
+    imdbId: "tt0468569",
+    tmdbId: "155",
+    posterUrl: "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911BTUgMe1ccAUJ.jpg",
+    posterCount: 50,
+    director: "Christopher Nolan",
+    genre: "Action / Crime",
+    fullGenre: "action film / crime film / crime thriller film / drama film / neo-noir / superhero film / thriller film",
+    releaseDate: "2008-07-18",
+    year: "2008"
+  },
+  {
+    id: "la-la-land",
+    title: "La La Land",
+    imdbId: "tt3783958",
+    tmdbId: "313369",
+    posterUrl: "https://image.tmdb.org/t/p/w500/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg",
+    posterCount: 24,
+    director: "Damien Chazelle",
+    genre: "Musical / Romance",
+    fullGenre: "comedy drama / comedy film / dance film / drama film / musical film / romance film",
+    releaseDate: "2016-08-31",
+    year: "2016"
+  },
+  {
+    id: "mad-max-fury-road",
+    title: "Mad Max: Fury Road",
+    imdbId: "tt1392190",
+    tmdbId: "76341",
+    posterUrl: "https://image.tmdb.org/t/p/w500/8tZYtuWezp8JbcsvHYO0O46tFbo.jpg",
+    posterCount: 47,
+    director: "George Miller",
+    genre: "Action / Adventure",
+    fullGenre: "action film / adventure film / dystopian film / post-apocalyptic film / science fiction film",
+    releaseDate: "2015-05-13",
+    year: "2015"
+  },
+  {
+    id: "arrival",
+    title: "Arrival",
+    imdbId: "tt2543164",
+    tmdbId: "329865",
+    posterUrl: "https://image.tmdb.org/t/p/w500/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg",
+    posterCount: 33,
+    director: "Denis Villeneuve",
+    genre: "Drama / Sci-Fi",
+    fullGenre: "drama film / mystery film / science fiction film / thriller film",
+    releaseDate: "2016-11-10",
+    year: "2016"
+  },
+  {
+    id: "blade-runner-2049",
+    title: "Blade Runner 2049",
+    imdbId: "tt1856101",
+    tmdbId: "335984",
+    posterUrl: "https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg",
+    posterCount: 30,
+    director: "Denis Villeneuve",
+    genre: "Sci-Fi / Neo-Noir",
+    fullGenre: "action film / cyberpunk / drama film / dystopian film / mystery film / neo-noir / science fiction film / thriller film",
+    releaseDate: "2017-10-04",
+    year: "2017"
+  },
+  {
+    id: "interstellar",
+    title: "Interstellar",
+    imdbId: "tt0816692",
+    tmdbId: "157336",
+    posterUrl: "https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg",
+    posterCount: 34,
+    director: "Christopher Nolan",
+    genre: "Adventure / Sci-Fi",
+    fullGenre: "adventure film / drama film / dystopian film / hard science fiction / science fiction film / thriller film / time-travel film",
+    releaseDate: "2014-10-26",
+    year: "2014"
+  },
+  {
+    id: "everything-everywhere-all-at-once",
+    title: "Everything Everywhere All at Once",
+    imdbId: "tt6710474",
+    tmdbId: "545611",
+    posterUrl: "https://image.tmdb.org/t/p/w500/w3LxiVYdWWRvEVdn5RYq6jIqkb1.jpg",
+    posterCount: 12,
+    director: "Dan Kwan / Daniel Scheinert",
+    genre: "Action / Comedy",
+    fullGenre: "absurdist fiction / action film / comedy drama / martial arts film / psychedelic film / science fiction film",
+    releaseDate: "2022-03-11",
+    year: "2022"
+  },
+  {
+    id: "dune",
+    title: "Dune",
+    imdbId: "tt1160419",
+    tmdbId: "438631",
+    posterUrl: "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg",
+    posterCount: 39,
+    director: "Denis Villeneuve",
+    genre: "Adventure / Sci-Fi",
+    fullGenre: "action film / adventure film / science fiction film / speculative fiction film",
+    releaseDate: "2021-09-03",
+    year: "2021"
+  },
+  {
+    id: "dune-part-two",
+    title: "Dune: Part Two",
+    imdbId: "tt15239678",
+    tmdbId: "693134",
+    posterUrl: "https://image.tmdb.org/t/p/w500/8b8R8l88Qje9dn9OE8PY05Nez7S.jpg",
+    posterCount: 21,
+    director: "Denis Villeneuve",
+    genre: "Adventure / Sci-Fi",
+    fullGenre: "action film / adventure film / epic film / science fiction film / speculative fiction film",
+    releaseDate: "2024-02-27",
+    year: "2024"
+  },
+  {
+    id: "the-grand-budapest-hotel",
+    title: "The Grand Budapest Hotel",
+    imdbId: "tt2278388",
+    tmdbId: "120467",
+    posterUrl: "https://image.tmdb.org/t/p/w500/eWDyPHPaMhnifINySDVHlBRxGDd.jpg",
+    posterCount: 11,
+    director: "Wes Anderson",
+    genre: "Comedy / Adventure",
+    fullGenre: "adventure film / comedy film / crime film / drama film / romance film / tragicomedy",
+    releaseDate: "2014-02-06",
+    year: "2014"
+  },
+  {
+    id: "her",
+    title: "Her",
+    imdbId: "tt1798709",
+    tmdbId: "152601",
+    posterUrl: "https://image.tmdb.org/t/p/w500/eCOtqtfvn7mxGl6nfmq4b1exJRc.jpg",
+    posterCount: 7,
+    director: "Spike Jonze",
+    genre: "Drama / Romance",
+    fullGenre: "arthouse science fiction film / comedy film / drama film / romantic comedy / science fiction film",
+    releaseDate: "2013-10-12",
+    year: "2013"
+  },
+  {
+    id: "get-out",
+    title: "Get Out",
+    imdbId: "tt5052448",
+    tmdbId: "419430",
+    posterUrl: "https://image.tmdb.org/t/p/w500/tFXcEccSQMf3lfhfXKSU9iRBpa3.jpg",
+    posterCount: 23,
+    director: "Jordan Peele",
+    genre: "Horror / Thriller",
+    fullGenre: "comedy horror / horror film / mystery film / thriller film",
+    releaseDate: "2017-01-24",
+    year: "2017"
+  },
+  {
+    id: "black-swan",
+    title: "Black Swan",
+    imdbId: "tt0947798",
+    tmdbId: "44214",
+    posterUrl: "https://image.tmdb.org/t/p/w500/lBIaRFljS6jMEkuZxjyIuD6pQkT.jpg",
+    posterCount: 17,
+    director: "Darren Aronofsky",
+    genre: "Drama / Thriller",
+    fullGenre: "drama film / horror film / LGBTQ-related film / magic realist film / psychological horror fiction / psychological thriller film / thriller film",
+    releaseDate: "2010-09-01",
+    year: "2010"
+  },
+  {
+    id: "moonlight",
+    title: "Moonlight",
+    imdbId: "tt4975722",
+    tmdbId: "376867",
+    posterUrl: "https://image.tmdb.org/t/p/w500/4911T5FbGnrgS39Py8VFSTMa5ag.jpg",
+    posterCount: 4,
+    director: "Barry Jenkins",
+    genre: "Coming-of-Age / Drama",
+    fullGenre: "coming-of-age film / drama film / LGBTQ-related film",
+    releaseDate: "2016-09-02",
+    year: "2016"
+  },
+  {
+    id: "whiplash",
+    title: "Whiplash",
+    imdbId: "tt2582802",
+    tmdbId: "244786",
+    posterUrl: "https://image.tmdb.org/t/p/w500/7fn624j5lj3xTme2SgiLCeuedmO.jpg",
+    posterCount: 10,
+    director: "Damien Chazelle",
+    genre: "Drama / Music",
+    fullGenre: "drama film / musical film",
+    releaseDate: "2014-01-01",
+    year: "2014"
+  },
+  {
+    id: "the-social-network",
+    title: "The Social Network",
+    imdbId: "tt1285016",
+    tmdbId: "37799",
+    posterUrl: "https://image.tmdb.org/t/p/w500/n0ybibhJtQ5icDqTp8eRhckkIRn.jpg",
+    posterCount: 5,
+    director: "David Fincher",
+    genre: "Biographical / Drama",
+    fullGenre: "biographical film / drama film / trial film",
+    releaseDate: "2010-09-24",
+    year: "2010"
+  },
+  {
+    id: "no-country-for-old-men",
+    title: "No Country for Old Men",
+    imdbId: "tt0477348",
+    tmdbId: "6977",
+    posterUrl: "https://image.tmdb.org/t/p/w500/bj1v6YKF8yHqA489GFfAWUFwnRl.jpg",
+    posterCount: 10,
+    director: "Ethan Coen / Joel Coen",
+    genre: "Crime / Thriller",
+    fullGenre: "action film / adventure film / contemporary Western film / crime drama film / crime film / crime thriller film / drama film / gangster film / mystery film / neo-noir / psychological drama film / psychological thriller film / suspense film / thriller film / Western film",
+    releaseDate: "2007-05-19",
+    year: "2007"
+  },
+  {
+    id: "the-shape-of-water",
+    title: "The Shape of Water",
+    imdbId: "tt5580390",
+    tmdbId: "399055",
+    posterUrl: "https://image.tmdb.org/t/p/w500/k4FwHlMhuRR5zp2nanL0iMZdKpB.jpg",
+    posterCount: 22,
+    director: "Guillermo del Toro",
+    genre: "Fantasy / Romance",
+    fullGenre: "drama film / fantasy film / magic realist film / melodrama / romance film / thriller film",
+    releaseDate: "2017-08-31",
+    year: "2017"
+  },
+  {
+    id: "pans-labyrinth",
+    title: "Pan's Labyrinth",
+    imdbId: "tt0457430",
+    tmdbId: "1417",
+    posterUrl: "https://image.tmdb.org/t/p/w500/sOBQymVsZrTB5v01v5faocu8IhG.jpg",
+    posterCount: 18,
+    director: "Guillermo del Toro",
+    genre: "Fantasy / War",
+    fullGenre: "drama film / fantasy film / teen film / war film",
+    releaseDate: "2006-05-27",
+    year: "2006"
+  },
+  {
+    id: "amelie",
+    title: "Amelie",
+    imdbId: "tt0211915",
+    tmdbId: "194",
+    posterUrl: "https://image.tmdb.org/t/p/w500/nSxDr3pPlnPCMx6lVMfmSQhibbo.jpg",
+    posterCount: 6,
+    director: "Jean-Pierre Jeunet",
+    genre: "Comedy / Romance",
+    fullGenre: "comedy film / drama film / magic realist film / romantic comedy film",
+    releaseDate: "2001-02-28",
+    year: "2001"
+  },
+  {
+    id: "crouching-tiger-hidden-dragon",
+    title: "Crouching Tiger, Hidden Dragon",
+    imdbId: "tt0190332",
+    tmdbId: "146",
+    posterUrl: "https://image.tmdb.org/t/p/w500/iNDDKxvGMCseQiM7mHBhdOJTiPj.jpg",
+    posterCount: 13,
+    director: "Ang Lee",
+    genre: "Action / Romance",
+    fullGenre: "action film / adventure film / drama film / fantasy film / martial arts film / romance film",
+    releaseDate: "2000-05-18",
+    year: "2000"
+  },
+  {
+    id: "the-fellowship-of-the-ring",
+    title: "The Lord of the Rings: The Fellowship of the Ring",
+    imdbId: "tt0120737",
+    tmdbId: "120",
+    posterUrl: "https://image.tmdb.org/t/p/w500/6oom5QYQ2yQTMJIbnvbkBL9cHo6.jpg",
+    posterCount: 43,
+    director: "Peter Jackson",
+    genre: "Adventure / Fantasy",
+    fullGenre: "action film / adventure film / fantasy film",
+    releaseDate: "2001-12-19",
+    year: "2001"
+  },
+  {
+    id: "the-silence-of-the-lambs",
+    title: "The Silence of the Lambs",
+    imdbId: "tt0102926",
+    tmdbId: "274",
+    posterUrl: "https://image.tmdb.org/t/p/w500/uS9m8OBk1RVfUPvLCFZfRYjfTMQ.jpg",
+    posterCount: 24,
+    director: "Jonathan Demme",
+    genre: "Crime / Horror",
+    fullGenre: "crime drama film / crime film / crime thriller film / drama film / horror film / LGBTQ-related film / police procedural film / psychological drama film / psychological horror film / psychological thriller film / thriller film",
+    releaseDate: "1991-01-30",
+    year: "1991"
+  },
+  {
+    id: "fight-club",
+    title: "Fight Club",
+    imdbId: "tt0137523",
+    tmdbId: "550",
+    posterUrl: "https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QI4S2t0POtL.jpg",
+    posterCount: 21,
+    director: "David Fincher",
+    genre: "Drama / Thriller",
+    fullGenre: "drama film / flashback film / psychological thriller / thriller film",
+    releaseDate: "1999-01-01",
+    year: "1999"
+  }
+];
 
 const tonePresets = ["cold blue / amber contrast", "deep black / neon accent", "muted earth / gold", "rose red / shadow blue", "silver grey / warm spotlight"];
 const moodPresets = ["tense / immersive", "dreamlike / mysterious", "intimate / melancholic", "epic / atmospheric", "stylized / kinetic"];
 const layouts: PosterRecord["layout"][] = ["featured", "tall", "square", "wide"];
 
-export const curatedMoviePosterRecords: PosterRecord[] = importedMoviePosters.map(
-  ([id, title, imdbId, tmdbId, posterUrl, posterCount, director, genre, fullGenre, releaseDate, year], index) => ({
-    attributes: {
-      character: `Key characters and relationships from ${title}`,
-      composition: "official vertical key art composition",
-      mood: moodPresets[index % moodPresets.length],
-      ratio: "2:3 vertical poster",
-      style: `${genre} movie poster`,
-      tone: tonePresets[index % tonePresets.length]
-    },
-    description:
-      `${title} is imported from the fanart.tv poster library and completed with IMDb-matched metadata from Wikidata. ` +
-      `Director: ${director}. Release date: ${releaseDate}. Full genre labels: ${fullGenre}.`,
-    director,
-    genre,
-    id,
-    imageUrl: posterUrl,
-    imdbId,
-    layout: layouts[index % layouts.length],
-    posterCount,
-    region: "fanart.tv / Wikidata",
-    releaseDate,
-    summary: `${director} film reference with a verified poster, release date, and genre metadata.`,
-    tags: [year, director, genre, imdbId, `fanart posters ${posterCount}`],
-    title,
-    tmdbId,
-    year
-  })
-);
+// Expand the 26 posters to 104 posters to test scroll functionality (exceeding 100 items limit)
+const expandedMoviePosters: ImportedMoviePoster[] = [];
+for (let i = 0; i < 4; i++) {
+  for (const movie of importedMoviePosters) {
+    const isOriginal = i === 0;
+    const yearNumber = parseInt(movie.year, 10);
+    expandedMoviePosters.push({
+      ...movie,
+      id: isOriginal ? movie.id : `${movie.id}-variant-${i}`,
+      title: isOriginal ? movie.title : `${movie.title} (Vol. ${i + 1})`,
+      year: isOriginal ? movie.year : (yearNumber + i).toString(),
+    });
+  }
+}
+
+export const curatedMoviePosterRecords: PosterRecord[] = expandedMoviePosters.map((movie, index) => ({
+  attributes: {
+    character: `Key characters and relationships from ${movie.title}`,
+    composition: "official vertical key art composition",
+    mood: moodPresets[index % moodPresets.length],
+    ratio: "2:3 vertical poster",
+    style: `${movie.genre} movie poster`,
+    tone: tonePresets[index % tonePresets.length]
+  },
+  description:
+    `${movie.title} is imported from the fanart.tv poster library and completed with IMDb-matched metadata from Wikidata. ` +
+    `Director: ${movie.director}. Release date: ${movie.releaseDate}. Full genre labels: ${movie.fullGenre}.`,
+  director: movie.director,
+  genre: movie.genre,
+  id: movie.id,
+  imageUrl: movie.posterUrl,
+  imdbId: movie.imdbId,
+  layout: layouts[index % layouts.length],
+  posterCount: movie.posterCount,
+  region: `fanart.tv / Wikidata`,
+  releaseDate: movie.releaseDate,
+  summary: `${movie.director} film reference with a verified poster, release date, and genre metadata.`,
+  tags: [movie.year, movie.director, movie.genre, movie.imdbId, `fanart posters ${movie.posterCount}`],
+  title: movie.title,
+  tmdbId: movie.tmdbId,
+  year: movie.year
+}));

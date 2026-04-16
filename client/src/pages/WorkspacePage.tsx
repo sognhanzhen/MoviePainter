@@ -34,6 +34,11 @@ const chatModelOptions = [
     description: "Faster draft exploration for composition and style direction.",
     id: "nano-banana-2",
     label: "Nano Banana 2"
+  },
+  {
+    description: "Photorealistic style generation using Qwen Wanxiang 2.7 Pro model.",
+    id: "wan2.7-image-pro",
+    label: "Qwen Wanxiang 2.7 Pro"
   }
 ] as const;
 
@@ -379,10 +384,10 @@ export function WorkspacePage() {
       token
     });
 
-    attachPoster(workspacePosterModal.id, "workspace_inspiration", nextMode);
-
     if (nextMode === "chat") {
-      setChatNotice(`已选中《${workspacePosterModal.title}》，可继续作为当前生成器的参考海报。`);
+      applyPosterTemplate(workspacePosterModal, nextMode);
+    } else {
+      attachPoster(workspacePosterModal.id, "workspace_inspiration", nextMode);
     }
 
     setWorkspacePosterModal(null);
@@ -483,8 +488,8 @@ export function WorkspacePage() {
     }
   }
 
-  function applyPosterTemplate(poster: PosterRecord) {
-    attachPoster(poster.id);
+  function applyPosterTemplate(poster: PosterRecord, nextMode: WorkspaceMode = "chat") {
+    attachPoster(poster.id, "workspace_inspiration", nextMode);
     setChatDraft(buildTemplatePrompt(poster));
     setSelectedRatioId(resolveRatioOptionId(poster.attributes.ratio));
     setChatNotice(
@@ -496,25 +501,15 @@ export function WorkspacePage() {
 
   async function submitChatGeneration() {
     const prompt = chatDraft.trim();
-    const posterForRequest = selectedPoster ?? posters[0] ?? null;
+    const posterForRequest = selectedPoster ?? posters[0] ?? { id: "free-prompt", title: "Free Prompt" };
 
     if (!token) {
       setChatNotice("当前登录会话已恢复，但后端令牌暂不可用，无法发起生成。");
       return;
     }
 
-    if (!token) {
-      setChatNotice("当前登录会话已恢复，但后端令牌暂不可用，无法发起生成。");
-      return;
-    }
-
-    if (prompt.length < 8) {
-      setChatNotice("请输入更完整的 prompt 后再开始生成。");
-      return;
-    }
-
-    if (!posterForRequest) {
-      setChatNotice("当前没有可用的模板海报数据，暂时无法发起生成。");
+    if (prompt.length < 2) {
+      setChatNotice("请输入 prompt 后再开始生成。");
       return;
     }
 
@@ -680,6 +675,15 @@ export function WorkspacePage() {
   const canViewNewer = activeIndex > 0 && panelRecord?.status !== "submitting";
   const canViewOlder = activeIndex >= 0 && activeIndex < chatGenerationDeck.length - 1 && panelRecord?.status !== "submitting";
 
+  function clearSelectedPoster() {
+    if (searchParams.has("posterId")) {
+      setSearchParams((prev) => {
+        prev.delete("posterId");
+        return prev;
+      }, { replace: true });
+    }
+  }
+
   return (
     <section className="space-y-16">
       <header className="mx-auto max-w-4xl text-center">
@@ -695,8 +699,9 @@ export function WorkspacePage() {
       {mode === "chat" ? (
         <section ref={mainComposerRef} className="mx-auto max-w-4xl">
           <ChatComposer
-            attachedTemplateTitle={selectedPoster?.title ?? ""}
-            notice={chatNotice}
+            attachedPoster={selectedPoster}
+              onRemoveAttachedPoster={clearSelectedPoster}
+              notice={chatNotice}
             onPromptChange={setChatDraft}
             onReferenceImageChange={handleReferenceImageChange}
             onRemoveReferenceImage={() => setReferenceImage(null)}
@@ -871,7 +876,8 @@ export function WorkspacePage() {
           >
             {isFloatingComposerExpanded ? (
               <ChatComposer
-                attachedTemplateTitle={selectedPoster?.title ?? ""}
+                attachedPoster={selectedPoster}
+              onRemoveAttachedPoster={clearSelectedPoster}
                 notice={chatNotice}
                 onPromptChange={setChatDraft}
                 onReferenceImageChange={handleReferenceImageChange}
@@ -927,8 +933,9 @@ export function WorkspacePage() {
           panelRecord={panelRecord}
         >
           <ChatComposer
-            attachedTemplateTitle={panelRecord.templatePosterTitle ?? selectedPoster?.title ?? ""}
-            notice={panelRecord.status === "submitting" ? "这轮正在生成，你可以先准备下一轮 prompt。" : chatNotice}
+            attachedPoster={posters.find(p => p.id === panelRecord.templatePosterId) ?? selectedPoster}
+              onRemoveAttachedPoster={clearSelectedPoster}
+              notice={panelRecord.status === "submitting" ? "这轮正在生成，你可以先准备下一轮 prompt。" : chatNotice}
             onPromptChange={setChatDraft}
             onReferenceImageChange={handleReferenceImageChange}
             onRemoveReferenceImage={() => setReferenceImage(null)}
@@ -962,12 +969,13 @@ export function WorkspacePage() {
 }
 
 function ChatComposer({
-  attachedTemplateTitle,
+  attachedPoster,
   compact = false,
   notice,
   onOpenPanel,
   onPromptChange,
   onReferenceImageChange,
+  onRemoveAttachedPoster,
   onRemoveReferenceImage,
   onSelectModel,
   onSelectRatio,
@@ -981,12 +989,13 @@ function ChatComposer({
   uploadInputId,
   variant
 }: {
-  attachedTemplateTitle: string;
+  attachedPoster?: Pick<PosterRecord, "imageUrl" | "title"> | null;
   compact?: boolean;
   notice: string;
   onOpenPanel?: () => void;
   onPromptChange: (value: string) => void;
   onReferenceImageChange: (file: File | null) => void;
+  onRemoveAttachedPoster?: () => void;
   onRemoveReferenceImage: () => void;
   onSelectModel: (modelId: (typeof chatModelOptions)[number]["id"]) => void;
   onSelectRatio: (ratioId: (typeof chatRatioOptions)[number]["id"]) => void;
@@ -1181,7 +1190,7 @@ function ChatComposer({
     return (
       <div ref={composerRef} className={outerClassName}>
         <div className="px-6 pt-7 pb-4 sm:px-8 sm:pt-8">
-          {referenceImage || attachedTemplateTitle ? (
+          {referenceImage || attachedPoster ? (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {referenceImage ? (
                 <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/6 px-2 py-1.5 text-xs font-semibold text-neutral-300">
@@ -1197,10 +1206,21 @@ function ChatComposer({
                   </button>
                 </div>
               ) : null}
-              {attachedTemplateTitle ? (
-                <span className="rounded-lg border border-[#ffb4aa]/18 bg-[#ffb4aa]/10 px-3 py-2 text-xs font-semibold text-[#ffdad5]">
-                  {attachedTemplateTitle}
-                </span>
+              {attachedPoster ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[#ffb4aa]/18 bg-[#ffb4aa]/10 px-2 py-1.5 text-xs font-semibold text-[#ffdad5]">
+                  <img src={attachedPoster.imageUrl} alt={attachedPoster.title} className="h-8 w-8 rounded-md object-cover" />
+                  <span className="max-w-[10rem] truncate">{attachedPoster.title}</span>
+                  {onRemoveAttachedPoster && (
+                    <button
+                      type="button"
+                      onClick={onRemoveAttachedPoster}
+                      className="ml-1 cursor-pointer rounded px-1.5 py-0.5 text-[#ffb4aa]/70 transition hover:bg-[#ffb4aa]/20 hover:text-[#ffdad5]"
+                      aria-label="Remove attached poster"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -1369,10 +1389,21 @@ function ChatComposer({
               }}
             />
 
-            {attachedTemplateTitle && isDockedComposer && !isPanelComposer ? (
-              <span className="max-w-full truncate rounded-full bg-white/76 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                {attachedTemplateTitle}
-              </span>
+            {attachedPoster && isDockedComposer && !isPanelComposer ? (
+              <div className="mt-2 flex max-w-[12rem] items-center gap-1.5 rounded-full bg-slate-900/10 py-1 pl-2 pr-1 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur">
+                <img src={attachedPoster.imageUrl} alt={attachedPoster.title} className="h-4 w-4 shrink-0 rounded object-cover shadow-sm" />
+                <span className="truncate">{attachedPoster.title}</span>
+                {onRemoveAttachedPoster && (
+                  <button
+                    type="button"
+                    onClick={onRemoveAttachedPoster}
+                    className="ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-slate-900/10 text-[10px] text-slate-500 transition hover:bg-rose-500 hover:text-white"
+                    aria-label="Remove attached poster"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
 
@@ -2067,6 +2098,8 @@ function DrawWorkspace({
     .filter((module) => drawState[module.key].enabled && Boolean(drawState[module.key].importedValue))
     .map((module) => module.label);
 
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div className="space-y-5">
       <div>
@@ -2081,7 +2114,19 @@ function DrawWorkspace({
         {selectedPoster ? (
           <div className="grid gap-4 md:grid-cols-[220px_1fr]">
             <div className="overflow-hidden rounded-lg bg-slate-950">
-              <img src={selectedPoster.imageUrl} alt={selectedPoster.title} className="h-full w-full object-cover" />
+              {imgFailed ? (
+                <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#2a1a2e] via-[#1a1a2e] to-[#0d1117] p-4 text-center">
+                  <span className="text-4xl">🎬</span>
+                  <p className="mt-3 font-[var(--font-display)] text-lg font-bold leading-tight text-white/80">{selectedPoster.title}</p>
+                </div>
+              ) : (
+                <img
+                  src={selectedPoster.imageUrl}
+                  alt={selectedPoster.title}
+                  className="h-full w-full object-cover"
+                  onError={() => setImgFailed(true)}
+                />
+              )}
             </div>
             <div>
               <p className="text-xs tracking-[0.24em] text-[#ffb4aa] uppercase">Reference Inserted</p>

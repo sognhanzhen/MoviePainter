@@ -26,8 +26,15 @@ export function HistoryDetailPage() {
     let cancelled = false;
 
     async function loadRecord() {
-      setLoading(true);
-      setMessage("加载中");
+      const initialCache = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId));
+      if (initialCache) {
+        setRecord(initialCache);
+        setLoading(false);
+        setMessage("同步最新状态...");
+      } else {
+        setLoading(true);
+        setMessage("加载中");
+      }
 
       try {
         const response = await appDataRequest.getHistoryRecord(token, historyId);
@@ -43,9 +50,13 @@ export function HistoryDetailPage() {
           return;
         }
 
-        const fallbackRecord = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId));
-        setRecord(fallbackRecord);
-        setMessage(fallbackRecord ? "显示缓存" : error instanceof Error ? error.message : "未找到记录");
+        if (!initialCache) {
+          const fallbackRecord = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId));
+          setRecord(fallbackRecord);
+          setMessage(fallbackRecord ? "显示缓存" : error instanceof Error ? error.message : "未找到记录");
+        } else {
+          setMessage(error instanceof Error ? error.message : "后台同步失败");
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -95,28 +106,28 @@ export function HistoryDetailPage() {
   if (loading) {
     return (
       <section className="space-y-6">
-        <div className="h-28 animate-pulse rounded-[2rem] border border-white/60 bg-white/75" />
-        <div className="h-[480px] animate-pulse rounded-[2rem] border border-white/60 bg-white/75" />
+        <div className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5" />
+        <div className="h-[480px] animate-pulse rounded-2xl border border-white/10 bg-white/5" />
       </section>
     );
   }
 
   if (!record) {
     return (
-      <section className="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-lg shadow-slate-950/6 backdrop-blur">
-        <p className="text-xs tracking-[0.3em] text-slate-400 uppercase">History Detail</p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-950">未找到历史记录</h2>
-        <p className="mt-4 text-sm leading-6 text-slate-600">{message}</p>
+      <section className="rounded-2xl border border-white/10 bg-[#181918] p-8 shadow-lg backdrop-blur">
+        <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">History Detail</p>
+        <h2 className="mt-3 text-3xl font-semibold text-white">未找到历史记录</h2>
+        <p className="mt-4 text-sm leading-6 text-neutral-400">{message}</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             to="/history"
-            className="rounded-[1.2rem] bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="rounded-[1.2rem] bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-neutral-200"
           >
             返回历史记录
           </Link>
           <Link
             to="/workspace"
-            className="rounded-[1.2rem] border border-slate-900/10 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-slate-950"
+            className="rounded-[1.2rem] border border-white/10 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
           >
             去生成工作区
           </Link>
@@ -127,25 +138,25 @@ export function HistoryDetailPage() {
 
   return (
     <section className="space-y-6">
-      <header className="rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-lg shadow-slate-950/6 backdrop-blur">
+      <header className="rounded-2xl border border-white/10 bg-[#181918] p-6 shadow-lg backdrop-blur">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs tracking-[0.3em] text-sky-700 uppercase">History Detail</p>
-            <h2 className="mt-3 text-3xl font-semibold text-slate-950">历史记录详情</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">{message}</p>
+            <p className="text-xs tracking-[0.3em] text-[#ffb4aa] uppercase">History Detail</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">历史记录详情</h2>
+            <p className="mt-3 text-sm leading-6 text-neutral-400">{message}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <GenerationStatusPill status={record.status} />
             <Link
               to="/history"
-              className="rounded-[1.15rem] border border-slate-900/10 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-slate-950"
+              className="rounded-[1.15rem] border border-white/10 bg-transparent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               返回列表
             </Link>
             <Link
               to={`/workspace?mode=${record.mode}&posterId=${record.posterId}`}
-              className="rounded-[1.15rem] bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="rounded-[1.15rem] bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-neutral-200"
             >
               在工作区继续
             </Link>
@@ -154,9 +165,9 @@ export function HistoryDetailPage() {
       </header>
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/92 shadow-lg shadow-slate-950/5 backdrop-blur">
+        <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#181918] shadow-lg backdrop-blur">
           <button
-            className="block w-full bg-slate-950 text-left"
+            className="block w-full bg-[#111211] text-left"
             disabled={!primaryOutput}
             onClick={() => primaryOutput && setActiveOutput(primaryOutput)}
             type="button"
@@ -164,17 +175,17 @@ export function HistoryDetailPage() {
             {heroImageUrl ? (
               <img src={heroImageUrl} alt={heroTitle} className="h-[520px] w-full object-cover" />
             ) : (
-              <div className="flex h-[520px] items-center justify-center text-sm text-slate-400">暂无图片</div>
+              <div className="flex h-[520px] items-center justify-center text-sm text-neutral-500">暂无图片</div>
             )}
           </button>
 
           <div className="space-y-5 p-6">
             <div>
-              <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">
+              <p className="text-xs tracking-[0.28em] text-neutral-500 uppercase">
                 {primaryOutput ? "Generated Output" : "Reference Poster"}
               </p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-950">{heroTitle}</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{poster?.title ? `参考：${poster.title}` : "暂无参考海报"}</p>
+              <h3 className="mt-2 text-2xl font-semibold text-white">{heroTitle}</h3>
+              <p className="mt-3 text-sm leading-6 text-neutral-400">{poster?.title ? `参考：${poster.title}` : "暂无参考海报"}</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -187,25 +198,25 @@ export function HistoryDetailPage() {
         </section>
 
         <section className="space-y-6">
-          <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
-            <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Prompt</p>
-            <p className="mt-3 text-sm leading-7 text-slate-700">{record.prompt}</p>
+          <article className="rounded-2xl border border-white/10 bg-[#181918] p-6 shadow-lg backdrop-blur">
+            <p className="text-xs tracking-[0.28em] text-neutral-500 uppercase">Prompt</p>
+            <p className="mt-3 text-sm leading-7 text-neutral-300">{record.prompt}</p>
 
             {record.errorMessage ? (
-              <div className="mt-5 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
-                <p className="text-xs tracking-[0.24em] text-rose-700 uppercase">Error</p>
-                <p className="mt-2 text-sm leading-6 text-rose-900">{record.errorMessage}</p>
+              <div className="mt-5 rounded-2xl border border-[#ffb4aa]/30 bg-[#ffb4aa]/10 p-5">
+                <p className="text-xs tracking-[0.24em] text-[#ffdad5] uppercase">Error</p>
+                <p className="mt-2 text-sm leading-6 text-[#ffb4aa]">{record.errorMessage}</p>
               </div>
             ) : null}
           </article>
 
-          <article className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-lg shadow-slate-950/5 backdrop-blur">
+          <article className="rounded-2xl border border-white/10 bg-[#181918] p-6 shadow-lg backdrop-blur">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs tracking-[0.28em] text-slate-400 uppercase">Outputs</p>
-                <h3 className="mt-3 text-2xl font-semibold text-slate-950">生成结果</h3>
+                <p className="text-xs tracking-[0.28em] text-neutral-500 uppercase">Outputs</p>
+                <h3 className="mt-3 text-2xl font-semibold text-white">生成结果</h3>
               </div>
-              <p className="text-sm text-slate-500">点击图片查看大图</p>
+              <p className="text-sm text-neutral-500">点击图片查看大图</p>
             </div>
 
             {outputs.length > 0 ? (
@@ -213,19 +224,19 @@ export function HistoryDetailPage() {
                 {outputs.map((output, index) => (
                   <button
                     key={output.id}
-                    className="overflow-hidden rounded-[1.35rem] border border-slate-900/8 bg-slate-50 text-left transition hover:-translate-y-0.5 hover:border-sky-300"
+                    className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#111211] text-left transition hover:-translate-y-0.5 hover:border-white/30"
                     onClick={() => setActiveOutput(output)}
                     type="button"
                   >
                     <img src={output.imageUrl} alt={output.title ?? "历史资产输出"} className="h-56 w-full object-cover" />
                     <div className="p-4">
-                      <p className="text-sm font-semibold text-slate-950">{output.title ?? `生成图 ${index + 1}`}</p>
+                      <p className="text-sm font-semibold text-white">{output.title ?? `生成图 ${index + 1}`}</p>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="mt-5 rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-7 text-slate-500">
+              <div className="mt-5 rounded-2xl border border-dashed border-white/12 bg-white/5 p-5 text-sm leading-7 text-neutral-400">
                 当前还没有可展示的输出结果。
               </div>
             )}
@@ -294,9 +305,9 @@ function mapCachedResultToOutput(result: { id: string; imageUrl: string; summary
 
 function MetaCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.25rem] border border-slate-900/8 bg-white p-4 shadow-sm">
-      <p className="text-xs tracking-[0.22em] text-slate-400 uppercase">{label}</p>
-      <p className="mt-2 text-sm font-medium text-slate-900">{value}</p>
+    <div className="rounded-[1.25rem] border border-white/6 bg-white/5 p-4 shadow-sm">
+      <p className="text-xs tracking-[0.22em] text-neutral-500 uppercase">{label}</p>
+      <p className="mt-2 text-sm font-medium text-white">{value}</p>
     </div>
   );
 }
