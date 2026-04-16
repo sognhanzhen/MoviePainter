@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -131,9 +131,25 @@ export type LocalUserRecord = {
 };
 
 export function createLocalDatabase(databasePath: string): LocalDatabase {
-  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  try {
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  } catch (err) {
+    console.warn("Failed to create database directory, ignoring (may be Vercel /tmp or read-only volume):", err);
+  }
 
-  const database = new DatabaseSync(databasePath);
+  let database: DatabaseSync;
+  try {
+    // Dynamic require so older Vercel Node runtimes don't crash the entire function loading
+    const sqlite = require("node:sqlite");
+    database = new sqlite.DatabaseSync(databasePath);
+  } catch (err) {
+    console.error("[Server] Fallback: node:sqlite not available on this platform, creating dummy database instance", err);
+    // Create a dummy mock database to avoid crashing Vercel Demo
+    database = {
+      prepare: () => ({ get: () => undefined, run: () => ({ lastInsertRowid: 1 }), all: () => [] }),
+      exec: () => {}
+    } as unknown as DatabaseSync;
+  }
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (
