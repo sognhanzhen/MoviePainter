@@ -12,6 +12,11 @@
     "build": "npm run clean:sidecars && npm run typecheck && next build",
     "start": "next start -H 0.0.0.0 -p 3000",
     "typecheck": "tsc --noEmit --incremental false",
+    "verify:prompts": "node scripts/verify-prompt-presets.mjs",
+    "verify:draw-option-prompts": "tsx scripts/verify-ai-draw-option-prompts.mjs",
+    "verify:draw-prompt-builder": "tsx scripts/verify-ai-draw-prompt-builder.mjs",
+    "export:prompt-csv": "tsx scripts/export-prompt-presets-csv.ts",
+    "export:draw-option-prompts": "tsx scripts/export-ai-draw-option-prompts-csv.ts",
     "db:init": "npm run db:init --workspace server"
   },
   "dependencies": {

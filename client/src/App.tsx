@@ -2,8 +2,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { PublicOnlyRoute } from "./components/PublicOnlyRoute";
-import { AuthPage } from "./pages/AuthPage";
 import { HistoryDetailPage } from "./pages/HistoryDetailPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LandingPage } from "./pages/LandingPage";
@@ -16,11 +14,6 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-
-        <Route element={<PublicOnlyRoute />}>
-          <Route path="/login" element={<AuthPage mode="login" />} />
-          <Route path="/register" element={<AuthPage mode="register" />} />
-        </Route>
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>

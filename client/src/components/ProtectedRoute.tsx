@@ -16,7 +16,7 @@ export function ProtectedRoute() {
   }
 
   if (status === "guest") {
-    return <Navigate replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} to="/login" />;
+    return <Navigate replace state={{ authMode: "login", from: `${location.pathname}${location.search}${location.hash}` }} to="/" />;
   }
 
   return <Outlet />;

@@ -8,6 +8,25 @@ export type WorkspaceAssetAction = "library_use" | "workspace_use";
 
 export type HistoryStatus = "failed" | "running" | "succeeded" | "waiting";
 
+export type PosterDrawDimensionKey =
+  | "shotScale"
+  | "characterPosition"
+  | "event"
+  | "era"
+  | "scene"
+  | "style"
+  | "atmosphere"
+  | "tone"
+  | "composition";
+
+export type PosterPromptPresets = {
+  aiChat: string;
+  aiDraw: {
+    dimensions: Record<PosterDrawDimensionKey, string>;
+    prompt: string;
+  };
+};
+
 export type PosterRecord = {
   attributes: {
     character: string;
@@ -25,6 +44,7 @@ export type PosterRecord = {
   imdbId?: string;
   layout: "featured" | "square" | "tall" | "wide";
   posterCount?: number;
+  promptPresets?: PosterPromptPresets;
   region: string;
   releaseDate?: string;
   summary: string;
@@ -114,6 +134,29 @@ export type WorkspaceGeneratedResult = {
   imageUrl: string;
   summary: string;
   title: string;
+};
+
+export type WorkspaceGenerationProgressEvent = {
+  attempt?: number;
+  elapsedMs?: number;
+  imageCount?: number;
+  message: string;
+  modelLabel?: string;
+  phase:
+    | "failed"
+    | "fallback"
+    | "polling"
+    | "preparing"
+    | "receiving"
+    | "saving"
+    | "submitted"
+    | "submitting"
+    | "succeeded";
+  provider?: "dashscope" | "doubao" | "gemini";
+  taskId?: string;
+  taskStatus?: string;
+  timestamp: string;
+  totalImages?: number;
 };
 
 export type WorkspaceGenerationResponse = {

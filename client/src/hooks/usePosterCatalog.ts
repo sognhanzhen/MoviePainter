@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { posterRecords, type AppDataSource, type PosterRecord } from "../data/posters";
+import { getPosterPromptPreset } from "../data/poster-prompt-presets";
 import { appDataRequest } from "../lib/api";
 
-const POSTER_CACHE_KEY = "moviepainter-poster-catalog-104";
+const POSTER_CACHE_KEY = "moviepainter-poster-catalog-prompts-v1";
 const POSTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 type PosterCache = { posters: PosterRecord[]; savedAt: number; source: AppDataSource };
@@ -26,6 +27,13 @@ function writePosterCache(posters: PosterRecord[], source: AppDataSource) {
   } catch { /* quota errors ignored */ }
 }
 
+function withPromptPresets(posters: PosterRecord[]) {
+  return posters.map((poster) => ({
+    ...poster,
+    promptPresets: poster.promptPresets ?? getPosterPromptPreset(poster.id)
+  }));
+}
+
 type PosterCatalogState = {
   error: string;
   loading: boolean;
@@ -44,7 +52,7 @@ export function usePosterCatalog(token: string) {
   const cached = readPosterCache();
   const [state, setState] = useState<PosterCatalogState>(
     cached
-      ? { error: "", loading: false, posters: cached.posters, source: cached.source }
+      ? { error: "", loading: false, posters: withPromptPresets(cached.posters), source: cached.source }
       : initialState
   );
 
@@ -63,11 +71,12 @@ export function usePosterCatalog(token: string) {
 
         if (cancelled) return;
 
-        writePosterCache(response.posters, response.source);
+        const postersWithPrompts = withPromptPresets(response.posters);
+        writePosterCache(postersWithPrompts, response.source);
         setState({
           error: "",
           loading: false,
-          posters: response.posters,
+          posters: postersWithPrompts,
           source: response.source
         });
       } catch (error) {
@@ -78,7 +87,7 @@ export function usePosterCatalog(token: string) {
         setState({
           error: error instanceof Error ? `${error.message}，当前先展示本地演示海报。` : "海报库加载失败，当前先展示本地演示海报。",
           loading: false,
-          posters: posterRecords,
+          posters: withPromptPresets(posterRecords),
           source: "local-demo"
         });
       }
@@ -88,7 +97,7 @@ export function usePosterCatalog(token: string) {
       setState({
         error: "",
         loading: false,
-        posters: posterRecords,
+        posters: withPromptPresets(posterRecords),
         source: "local-demo"
       });
       return;

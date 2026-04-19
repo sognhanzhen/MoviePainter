@@ -363,5 +363,5 @@ erDiagram
 
 - 历史生成记录页可直接基于 `generation_records + generation_outputs` 生成，不必单独再建“历史表”
 - 用户认证主数据不要与业务资料表混在一起
-- `AI Draw` 的六个模块建议先使用结构化字段，而不是一开始全部塞进 JSON
+- `AI Draw` 的九个维度建议先通过 `selected_modules_json + weights_json + prompt_text` 承载，后续再把稳定高频维度拆成结构化字段
 - 权重与多选结果可先用 `jsonb` 承载，后续再视复杂度细拆

@@ -12,6 +12,7 @@ Current planning direction:
 - Supabase will be the unified platform for backend data, curated poster library management, and all user business data
 - Supabase Studio is the current default management surface for运营与数据维护
 - `server/src/*` remains the shared backend business layer and local SQLite/Supabase adapter surface
+- `PROMPT_ENGINEERING.md` records the current `AI Chat` / `AI Draw` prompt split and the nine-dimension `AI Draw` analysis contract
 
 ## Development
 

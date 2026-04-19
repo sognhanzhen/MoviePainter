@@ -1,4 +1,5 @@
 import type { PosterRecord } from "./posters";
+import { getPosterPromptPreset } from "./poster-prompt-presets";
 
 type ImportedMoviePoster = {
   director: string;
@@ -430,6 +431,7 @@ export const curatedMoviePosterRecords: PosterRecord[] = importedMoviePosters.ma
   imdbId: movie.imdbId,
   layout: layouts[index % layouts.length],
   posterCount: movie.posterCount,
+  promptPresets: getPosterPromptPreset(movie.id),
   region: `fanart.tv / Wikidata`,
   releaseDate: movie.releaseDate,
   summary: `${movie.director} film reference with a verified poster, release date, and genre metadata.`,

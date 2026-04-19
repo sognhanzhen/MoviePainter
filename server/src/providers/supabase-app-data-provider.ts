@@ -15,7 +15,12 @@ import type {
   WorkspaceGenerationInput,
   WorkspaceGenerationResponse
 } from "../domain/app-data.js";
-import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator.js";
+import {
+  generateWorkspaceImages,
+  type AicanapiImageGeneratorConfig,
+  type WorkspaceGenerationProgressHandler
+} from "../services/aicanapi-image-generator.js";
+import { getPosterPromptPreset } from "../data/poster-prompt-presets.js";
 import type { AppDataProvider } from "./app-data-provider.js";
 
 type CreateSupabaseAppDataProviderInput = {
@@ -102,7 +107,11 @@ export function createSupabaseAppDataProvider({
   });
 
   return {
-    async generateWorkspace(input: { generation: WorkspaceGenerationInput; user: AuthenticatedUser }): Promise<ProviderResult<WorkspaceGenerationResponse>> {
+    async generateWorkspace(input: {
+      generation: WorkspaceGenerationInput;
+      onProgress?: WorkspaceGenerationProgressHandler;
+      user: AuthenticatedUser;
+    }): Promise<ProviderResult<WorkspaceGenerationResponse>> {
       if (input.user.kind === "local") {
         return fallback.generateWorkspace(input);
       }
@@ -116,9 +125,18 @@ export function createSupabaseAppDataProvider({
       const generated = await generateWorkspaceImages({
         config: imageGeneratorConfig,
         generation: input.generation,
+        onProgress: input.onProgress,
         poster: poster.data
       });
       const results = generated.results;
+
+      input.onProgress?.({
+        imageCount: results.length,
+        message: "正在保存生成记录与图片结果。",
+        phase: "saving",
+        timestamp: new Date().toISOString(),
+        totalImages: results.length
+      });
 
       const record = await insertGenerationRecord(supabase, {
         mode: input.generation.mode,
@@ -131,16 +149,19 @@ export function createSupabaseAppDataProvider({
       });
 
       if (input.generation.mode === "draw") {
+        const selectedModules = new Set(input.generation.selectedModules);
         await supabase.from("generation_draw_inputs").upsert(
           {
-            aspect_ratio_value: poster.data.attributes.ratio,
-            character_value: poster.data.attributes.character,
-            composition_value: poster.data.attributes.composition,
+            aspect_ratio_value: input.generation.ratioId ?? null,
+            character_value: selectedModules.has("shotScale") || selectedModules.has("characterPosition") || selectedModules.has("character")
+              ? input.generation.prompt
+              : null,
+            composition_value: selectedModules.has("composition") ? poster.data.attributes.composition : null,
             generation_id: record.id,
-            mood_value: poster.data.attributes.mood,
+            mood_value: selectedModules.has("atmosphere") || selectedModules.has("mood") ? poster.data.attributes.mood : null,
             selected_modules_json: input.generation.selectedModules,
-            style_value: poster.data.attributes.style,
-            tone_value: poster.data.attributes.tone,
+            style_value: selectedModules.has("style") ? poster.data.attributes.style : null,
+            tone_value: selectedModules.has("tone") ? poster.data.attributes.tone : null,
             weights_json: input.generation.moduleWeights
           },
           { onConflict: "generation_id" }
@@ -165,6 +186,14 @@ export function createSupabaseAppDataProvider({
           }
         })
       );
+
+      input.onProgress?.({
+        imageCount: results.length,
+        message: `已保存 ${results.length} 张生成图。`,
+        phase: "succeeded",
+        timestamp: new Date().toISOString(),
+        totalImages: results.length
+      });
 
       return {
         data: {
@@ -311,6 +340,7 @@ export function createSupabaseAppDataProvider({
             id: posterId,
             imageUrl: String(item.cover_image_url ?? ""),
             layout: normalizeLayout(item.layout),
+            promptPresets: getPosterPromptPreset(posterId),
             region: String(item.region ?? "未标注"),
             summary: String(item.summary ?? ""),
             tags,
@@ -442,6 +472,14 @@ export function createSupabaseAppDataProvider({
 }
 
 function buildWorkspaceAssetPrompt(input: WorkspaceAssetRecordInput, poster: PosterRecord) {
+  if (input.mode === "chat" && poster.promptPresets?.aiChat) {
+    return poster.promptPresets.aiChat;
+  }
+
+  if (input.mode === "draw" && poster.promptPresets?.aiDraw.prompt) {
+    return poster.promptPresets.aiDraw.prompt;
+  }
+
   const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
   const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
 
@@ -694,6 +732,7 @@ async function getPosterById(supabase: SupabaseClient, fallback: AppDataProvider
         id: String(data.id),
         imageUrl: String(data.cover_image_url ?? ""),
         layout: normalizeLayout(data.layout),
+        promptPresets: getPosterPromptPreset(String(data.id)),
         region: String(data.region ?? "未标注"),
         summary: String(data.summary ?? ""),
         tags,

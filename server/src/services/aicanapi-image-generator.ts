@@ -20,6 +20,7 @@ export type AicanapiImageGeneratorConfig = {
 type GenerateWorkspaceImagesInput = {
   config: AicanapiImageGeneratorConfig;
   generation: WorkspaceGenerationInput;
+  onProgress?: WorkspaceGenerationProgressHandler;
   poster: PosterRecord;
 };
 
@@ -41,11 +42,39 @@ type ResolvedModel = {
 type JsonRecord = Record<string, unknown>;
 
 const DEFAULT_IMAGE_MIME_TYPE = "image/png";
-const IMAGE_OUTPUT_COUNT = 4;
+const IMAGE_OUTPUT_COUNT = 1;
+
+export type WorkspaceGenerationProgressEvent = {
+  attempt?: number;
+  elapsedMs?: number;
+  imageCount?: number;
+  message: string;
+  modelLabel?: string;
+  phase:
+    | "failed"
+    | "fallback"
+    | "polling"
+    | "preparing"
+    | "receiving"
+    | "saving"
+    | "submitted"
+    | "submitting"
+    | "succeeded";
+  provider?: ResolvedModel["provider"];
+  taskId?: string;
+  taskStatus?: string;
+  timestamp: string;
+  totalImages?: number;
+};
+
+export type WorkspaceGenerationProgressHandler = (event: WorkspaceGenerationProgressEvent) => void;
+type WorkspaceGenerationProgressDraft = Omit<WorkspaceGenerationProgressEvent, "timestamp">;
+type InternalProgressEmitter = (event: WorkspaceGenerationProgressDraft) => void;
 
 export async function generateWorkspaceImages({
   config,
   generation,
+  onProgress,
   poster
 }: GenerateWorkspaceImagesInput): Promise<{
   height: number;
@@ -55,19 +84,38 @@ export async function generateWorkspaceImages({
 }> {
   const initialModel = resolveModel(config, generation);
   const aspectRatio = resolveAspectRatio(generation.ratioId ?? poster.attributes.ratio);
+  const emitProgress = createProgressEmitter(onProgress);
 
   async function performGeneration(model: ResolvedModel) {
     const apiStyle = resolveImageApiStyle(config);
     const size =
       model.provider === "dashscope"
-        ? resolveDashScopeSize(aspectRatio)
+        ? resolveDashScopeSize(aspectRatio, model.externalModel)
         : apiStyle === "modelgate"
         ? resolveModelGateImageSize(aspectRatio, model.provider)
         : resolveOpenAiImageSize(aspectRatio);
     const prompt = buildImagePrompt({ aspectRatio, generation, model, poster });
+    emitProgress({
+      imageCount: 0,
+      message: `${model.label} 正在准备生成 ${IMAGE_OUTPUT_COUNT} 张图。`,
+      modelLabel: model.label,
+      phase: "preparing",
+      provider: model.provider,
+      totalImages: IMAGE_OUTPUT_COUNT
+    });
 
     if (model.provider === "dashscope") {
-      return { outputs: await generateWithDashScope({ count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: config.dashscopeBaseUrl }), size };
+      return {
+        outputs: await generateWithDashScope({
+          count: IMAGE_OUTPUT_COUNT,
+          model,
+          onProgress: emitProgress,
+          prompt,
+          size,
+          url: config.dashscopeBaseUrl
+        }),
+        size
+      };
     }
 
     const outputs =
@@ -75,15 +123,25 @@ export async function generateWorkspaceImages({
         ? await generateWithModelGate({
             count: IMAGE_OUTPUT_COUNT,
             model,
+            onProgress: emitProgress,
             prompt,
             size,
             url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
           })
         : model.provider === "gemini"
-        ? await generateWithGemini({ aspectRatio, count: IMAGE_OUTPUT_COUNT, model, prompt, size, url: resolveBaseUrl(config.baseUrl) })
+        ? await generateWithGemini({
+            aspectRatio,
+            count: IMAGE_OUTPUT_COUNT,
+            model,
+            onProgress: emitProgress,
+            prompt,
+            size,
+            url: resolveBaseUrl(config.baseUrl)
+          })
         : await generateWithOpenAiImages({
             count: IMAGE_OUTPUT_COUNT,
             model,
+            onProgress: emitProgress,
             prompt,
             size,
             url: resolveImageGenerationUrl(config.baseUrl, apiStyle)
@@ -105,6 +163,14 @@ export async function generateWorkspaceImages({
 
     if (initialModel.provider !== "dashscope" && !isSensitive) {
       console.log(`[ImageGen] ${initialModel.provider} 失败，尝试 fallback 到万相。原因: ${errorMsg}`);
+      emitProgress({
+        imageCount: 0,
+        message: `${initialModel.label} 调用失败，正在切换到 Qwen 万相备用链路。`,
+        modelLabel: initialModel.label,
+        phase: "fallback",
+        provider: initialModel.provider,
+        totalImages: IMAGE_OUTPUT_COUNT
+      });
       const fallbackModel = resolveModel(config, { ...generation, modelId: "wan2.7-image-pro" } as unknown as WorkspaceGenerationInput);
       try {
         const res = await performGeneration(fallbackModel);
@@ -118,11 +184,35 @@ export async function generateWorkspaceImages({
       }
     } else {
       if (isSensitive) {
+        emitProgress({
+          imageCount: 0,
+          message: "输入提示可能包含敏感内容，模型拒绝生成。",
+          modelLabel: initialModel.label,
+          phase: "failed",
+          provider: initialModel.provider,
+          totalImages: IMAGE_OUTPUT_COUNT
+        });
         throw new Error(`输入提示可能包含敏感内容被拒 (415)，请修改提示词或更换参考海报再试。错误详细: ${errorMsg}`);
       }
       if (errorMsg.includes("503") || errorMsg.includes("逆向分组")) {
+        emitProgress({
+          imageCount: 0,
+          message: "当前提供商负载过高，请稍后重试或更换模型。",
+          modelLabel: initialModel.label,
+          phase: "failed",
+          provider: initialModel.provider,
+          totalImages: IMAGE_OUTPUT_COUNT
+        });
         throw new Error(`当前提供商负载过高 (503)，请稍后重试或更换为其他生图模型。详细: ${errorMsg}`);
       }
+      emitProgress({
+        imageCount: 0,
+        message: `${initialModel.label} 调用失败：${errorMsg}`,
+        modelLabel: initialModel.label,
+        phase: "failed",
+        provider: initialModel.provider,
+        totalImages: IMAGE_OUTPUT_COUNT
+      });
       throw error;
     }
   }
@@ -195,6 +285,7 @@ function assertConfigured(value: string, name: string) {
 async function generateWithOpenAiImages(input: {
   count: number;
   model: ResolvedModel;
+  onProgress: InternalProgressEmitter;
   prompt: string;
   size: ResolvedSize;
   url: string;
@@ -202,6 +293,15 @@ async function generateWithOpenAiImages(input: {
   const imageUrls: string[] = [];
 
   for (let index = 0; index < input.count; index += 1) {
+    input.onProgress({
+      attempt: index + 1,
+      imageCount: imageUrls.length,
+      message: `${input.model.label} 正在向图片接口提交第 ${index + 1} 张图。`,
+      modelLabel: input.model.label,
+      phase: "submitting",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
     const payload = {
       model: input.model.externalModel,
       n: 1,
@@ -217,6 +317,15 @@ async function generateWithOpenAiImages(input: {
     }
 
     imageUrls.push(nextImageUrls[0]);
+    input.onProgress({
+      attempt: index + 1,
+      imageCount: imageUrls.length,
+      message: `${input.model.label} 已返回 ${imageUrls.length} 张可展示图片。`,
+      modelLabel: input.model.label,
+      phase: "receiving",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
   }
 
   if (imageUrls.length === 0) {
@@ -235,11 +344,20 @@ async function generateWithOpenAiImages(input: {
 async function generateWithModelGate(input: {
   count: number;
   model: ResolvedModel;
+  onProgress: InternalProgressEmitter;
   prompt: string;
   size: ResolvedSize;
   url: string;
 }): Promise<ImageGenerationOutput[]> {
   if (input.model.provider === "doubao") {
+    input.onProgress({
+      imageCount: 0,
+      message: `${input.model.label} 正在向 ModelGate 提交图片请求。`,
+      modelLabel: input.model.label,
+      phase: "submitting",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
     const payload = {
       output_type: "base64",
       number_results: input.count,
@@ -255,6 +373,15 @@ async function generateWithModelGate(input: {
       throw new Error(`${input.model.label} 没有返回可展示图片`);
     }
 
+    input.onProgress({
+      imageCount: Math.min(imageUrls.length, input.count),
+      message: `${input.model.label} 已返回 ${Math.min(imageUrls.length, input.count)} 张可展示图片。`,
+      modelLabel: input.model.label,
+      phase: "receiving",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
+
     return imageUrls.slice(0, input.count).map((imageUrl, index) => ({
       height: input.size.height,
       imageUrl,
@@ -267,6 +394,15 @@ async function generateWithModelGate(input: {
   const outputs: ImageGenerationOutput[] = [];
 
   for (let index = 0; index < input.count; index += 1) {
+    input.onProgress({
+      attempt: index + 1,
+      imageCount: outputs.length,
+      message: `${input.model.label} 正在提交第 ${index + 1} 张图。`,
+      modelLabel: input.model.label,
+      phase: "submitting",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
     const payload = {
       model: input.model.externalModel,
       prompt: appendVariantPrompt(input.prompt, index, input.count),
@@ -288,6 +424,15 @@ async function generateWithModelGate(input: {
       title: `生成图 ${index + 1}`,
       width: input.size.width
     });
+    input.onProgress({
+      attempt: index + 1,
+      imageCount: outputs.length,
+      message: `${input.model.label} 已返回 ${outputs.length} 张可展示图片。`,
+      modelLabel: input.model.label,
+      phase: "receiving",
+      provider: input.model.provider,
+      totalImages: input.count
+    });
   }
 
   return outputs;
@@ -296,24 +441,32 @@ async function generateWithModelGate(input: {
 async function generateWithDashScope(input: {
   count: number;
   model: ResolvedModel;
+  onProgress: InternalProgressEmitter;
   prompt: string;
   size: ResolvedSize;
   url: string;
 }): Promise<ImageGenerationOutput[]> {
-  const apiUrl = `${input.url}/services/aigc/text2image/image-synthesis`;
+  const usesWan27Api = isDashScopeWan27Model(input.model.externalModel);
+  const apiUrl = `${input.url}${
+    usesWan27Api ? "/services/aigc/image-generation/generation" : "/services/aigc/text2image/image-synthesis"
+  }`;
   const headers = {
     Authorization: `Bearer ${input.model.apiKey}`,
     "Content-Type": "application/json",
     "X-DashScope-Async": "enable"
   };
-  const payload = {
-    model: input.model.externalModel,
-    input: { prompt: input.prompt },
-    parameters: {
-      size: input.size.value,
-      n: input.count
-    }
-  };
+  const payload = usesWan27Api ? buildWan27DashScopePayload(input) : buildLegacyDashScopePayload(input);
+  const startedAt = Date.now();
+
+  input.onProgress({
+    elapsedMs: 0,
+    imageCount: 0,
+    message: `${input.model.label} 正在向 DashScope 提交异步任务。`,
+    modelLabel: input.model.label,
+    phase: "submitting",
+    provider: input.model.provider,
+    totalImages: input.count
+  });
 
   const initialResponse = await fetch(apiUrl, {
     method: "POST",
@@ -328,6 +481,16 @@ async function generateWithDashScope(input: {
 
   const taskId = initialData.output.task_id;
   const taskUrl = `${input.url}/tasks/${taskId}`;
+  input.onProgress({
+    elapsedMs: Date.now() - startedAt,
+    imageCount: 0,
+    message: `${input.model.label} 已提交任务，等待 DashScope 调度。`,
+    modelLabel: input.model.label,
+    phase: "submitted",
+    provider: input.model.provider,
+    taskId,
+    totalImages: input.count
+  });
 
   let attempts = 0;
   const maxAttempts = 30; // Max 60 seconds (2s per delay)
@@ -346,15 +509,44 @@ async function generateWithDashScope(input: {
     const output = pollData.output;
     if (!output) continue;
 
+    const taskStatus = typeof output.task_status === "string" ? output.task_status : "UNKNOWN";
+    const metrics = readDashScopeMetrics(output, pollData);
+    input.onProgress({
+      attempt: attempts,
+      elapsedMs: Date.now() - startedAt,
+      imageCount: metrics.succeeded,
+      message: formatDashScopeProgressMessage(input.model.label, taskStatus, metrics.succeeded, metrics.total, attempts),
+      modelLabel: input.model.label,
+      phase: taskStatus === "SUCCEEDED" ? "receiving" : "polling",
+      provider: input.model.provider,
+      taskId,
+      taskStatus,
+      totalImages: metrics.total ?? input.count
+    });
+
     if (output.task_status === "SUCCEEDED") {
-      const results = output.results;
-      if (!Array.isArray(results) || results.length === 0) {
+      const imageUrls = extractDashScopeImageUrls(output);
+      if (imageUrls.length === 0) {
         throw new Error("DashScope 任务成功，但未返回结果");
       }
 
-      return results.map((result: any, index: number) => ({
+      const imageCount = Math.min(imageUrls.length, input.count);
+      input.onProgress({
+        attempt: attempts,
+        elapsedMs: Date.now() - startedAt,
+        imageCount,
+        message: `${input.model.label} 已返回 ${imageCount} 张可展示图片。`,
+        modelLabel: input.model.label,
+        phase: "receiving",
+        provider: input.model.provider,
+        taskId,
+        taskStatus,
+        totalImages: input.count
+      });
+
+      return imageUrls.slice(0, input.count).map((imageUrl, index) => ({
         height: input.size.height,
-        imageUrl: result.url,
+        imageUrl,
         summary: `${input.model.label} 输出 ${index + 1}`,
         title: `生成图 ${index + 1}`,
         width: input.size.width
@@ -419,6 +611,7 @@ async function generateWithGemini(input: {
   aspectRatio: string;
   count: number;
   model: ResolvedModel;
+  onProgress: InternalProgressEmitter;
   prompt: string;
   size: ResolvedSize;
   url: string;
@@ -427,6 +620,15 @@ async function generateWithGemini(input: {
     const outputs: ImageGenerationOutput[] = [];
 
     for (let index = 0; index < input.count; index += 1) {
+      input.onProgress({
+        attempt: index + 1,
+        imageCount: outputs.length,
+        message: `${input.model.label} 正在向 Gemini 原生接口提交第 ${index + 1} 张图。`,
+        modelLabel: input.model.label,
+        phase: "submitting",
+        provider: input.model.provider,
+        totalImages: input.count
+      });
       const output = await generateWithGeminiNative({
         ...input,
         prompt: appendVariantPrompt(input.prompt, index, input.count)
@@ -437,14 +639,32 @@ async function generateWithGemini(input: {
         summary: `${input.model.label} 输出 ${index + 1}`,
         title: `生成图 ${index + 1}`
       });
+      input.onProgress({
+        attempt: index + 1,
+        imageCount: outputs.length,
+        message: `${input.model.label} 已返回 ${outputs.length} 张可展示图片。`,
+        modelLabel: input.model.label,
+        phase: "receiving",
+        provider: input.model.provider,
+        totalImages: input.count
+      });
     }
 
     return outputs;
   } catch (nativeError) {
     try {
+      input.onProgress({
+        imageCount: 0,
+        message: `${input.model.label} 原生接口失败，正在尝试 OpenAI 图片兼容接口。`,
+        modelLabel: input.model.label,
+        phase: "fallback",
+        provider: input.model.provider,
+        totalImages: input.count
+      });
       return await generateWithOpenAiImages({
         count: input.count,
         model: input.model,
+        onProgress: input.onProgress,
         prompt: input.prompt,
         size: input.size,
         url: resolveImageGenerationUrl(input.url, "openai")
@@ -624,30 +844,66 @@ function buildImagePrompt(input: {
   model: ResolvedModel;
   poster: PosterRecord;
 }) {
-  const selectedModules = input.generation.selectedModules
-    .map((moduleKey) => `${moduleKey}: ${readPosterAttribute(input.poster, moduleKey)}`)
-    .join("\n");
-  const moduleWeights = Object.entries(input.generation.moduleWeights)
-    .map(([key, value]) => `${key} ${value}`)
-    .join(", ");
+  return input.generation.mode === "chat" ? buildAiChatImagePrompt(input) : buildAiDrawImagePrompt(input);
+}
 
+function buildAiChatImagePrompt(input: {
+  aspectRatio: string;
+  generation: WorkspaceGenerationInput;
+  model: ResolvedModel;
+  poster: PosterRecord;
+}) {
   return [
     "Create one finished cinematic movie poster image for direct display in a web application.",
+    "AI Chat mode: the reference poster is a broad style compass.",
+    "Use the reference for overall movie-poster taste, cinematic texture, lighting logic, genre feeling, and production value.",
+    "Do not copy the reference poster's exact characters, title design, layout, or scene one-to-one.",
     "Do not return explanations. The image should be polished, poster-like, and visually readable.",
     "Avoid random unreadable typography; if text appears, keep it subtle and poster-appropriate.",
     `Model route: ${input.model.label}`,
     `Mode: ${formatMode(input.generation.mode)}`,
     `Aspect ratio: ${input.aspectRatio}`,
+    `Final canvas must be ${input.aspectRatio}; do not return a square image unless the aspect ratio is 1:1.`,
     `User prompt: ${input.generation.prompt}`,
     `Reference title: ${input.poster.title}`,
     `Reference genre: ${input.poster.genre}`,
     `Reference summary: ${input.poster.summary}`,
-    `Character: ${input.poster.attributes.character}`,
-    `Style: ${input.poster.attributes.style}`,
-    `Mood: ${input.poster.attributes.mood}`,
-    `Tone: ${input.poster.attributes.tone}`,
-    `Composition: ${input.poster.attributes.composition}`,
-    selectedModules ? `Selected draw modules:\n${selectedModules}` : "",
+    `Reference description: ${input.poster.description}`,
+    `Reference overall character language: ${input.poster.attributes.character}`,
+    `Reference overall style: ${input.poster.attributes.style}`,
+    `Reference overall atmosphere: ${input.poster.attributes.mood}`,
+    `Reference overall color tone: ${input.poster.attributes.tone}`,
+    `Reference overall composition: ${input.poster.attributes.composition}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildAiDrawImagePrompt(input: {
+  aspectRatio: string;
+  generation: WorkspaceGenerationInput;
+  model: ResolvedModel;
+  poster: PosterRecord;
+}) {
+  const selectedDimensions = input.generation.selectedModules.map(formatDrawDimensionLabel).join("、");
+  const moduleWeights = Object.entries(input.generation.moduleWeights)
+    .map(([key, value]) => `${formatDrawDimensionLabel(key)} ${value}%`)
+    .join(", ");
+
+  return [
+    "Create one finished cinematic movie poster image for direct display in a web application.",
+    "AI Draw mode: only apply the poster dimensions explicitly selected by the user.",
+    "Do not transfer unselected reference-poster dimensions. Do not silently copy the whole poster style.",
+    "The Event dimension is user-defined; never invent an event from the reference poster when the user leaves Event empty.",
+    "Do not return explanations. The image should be polished, poster-like, and visually readable.",
+    "Avoid random unreadable typography; if text appears, keep it subtle and poster-appropriate.",
+    `Model route: ${input.model.label}`,
+    `Mode: ${formatMode(input.generation.mode)}`,
+    `Aspect ratio: ${input.aspectRatio}`,
+    `Final canvas must be ${input.aspectRatio}; do not return a square image unless the aspect ratio is 1:1.`,
+    `Authoritative AI Draw package:\n${input.generation.prompt}`,
+    `Reference title: ${input.poster.title}`,
+    selectedDimensions ? `Selected dimensions: ${selectedDimensions}` : "Selected dimensions: none",
     moduleWeights ? `Module weights: ${moduleWeights}` : ""
   ]
     .filter(Boolean)
@@ -656,6 +912,26 @@ function buildImagePrompt(input: {
 
 function formatMode(mode: WorkspaceMode) {
   return mode === "chat" ? "AI Chat" : "AI Draw";
+}
+
+function formatDrawDimensionLabel(key: string) {
+  const labels: Record<string, string> = {
+    atmosphere: "氛围",
+    character: "人物",
+    characterPosition: "人物位置",
+    composition: "构图",
+    era: "年代",
+    event: "事件",
+    mood: "氛围",
+    proportion: "比例",
+    ratio: "比例",
+    scene: "场景",
+    shotScale: "人物景别",
+    style: "风格",
+    tone: "色调"
+  };
+
+  return labels[key] ?? key;
 }
 
 function resolveBaseUrl(baseUrl: string) {
@@ -705,7 +981,7 @@ type ResolvedSize = {
 };
 
 function resolveOpenAiImageSize(aspectRatio: string): ResolvedSize {
-  if (["16:9", "3:2", "21:9"].includes(aspectRatio)) {
+  if (["16:9", "4:3", "3:2", "21:9"].includes(aspectRatio)) {
     return {
       height: 1024,
       value: "1536x1024",
@@ -762,7 +1038,24 @@ function resolveModelGateImageSize(aspectRatio: string, provider: ResolvedModel[
   return sizeByRatio[aspectRatio] ?? sizeByRatio["1:1"];
 }
 
-function resolveDashScopeSize(aspectRatio: string): ResolvedSize {
+function resolveDashScopeSize(aspectRatio: string, model: string): ResolvedSize {
+  if (isDashScopeWan27Model(model)) {
+    const sizeByRatio: Record<string, ResolvedSize> = {
+      "1:1": { height: 2048, value: "2048*2048", width: 2048 },
+      "2:3": { height: 2048, value: "1365*2048", width: 1365 },
+      "3:2": { height: 1365, value: "2048*1365", width: 2048 },
+      "3:4": { height: 2048, value: "1536*2048", width: 1536 },
+      "4:3": { height: 1536, value: "2048*1536", width: 2048 },
+      "4:5": { height: 2048, value: "1638*2048", width: 1638 },
+      "5:4": { height: 1638, value: "2048*1638", width: 2048 },
+      "9:16": { height: 2048, value: "1152*2048", width: 1152 },
+      "16:9": { height: 1152, value: "2048*1152", width: 2048 },
+      "21:9": { height: 878, value: "2048*878", width: 2048 }
+    };
+
+    return sizeByRatio[aspectRatio] ?? sizeByRatio["1:1"];
+  }
+
   const sizeByRatio: Record<string, ResolvedSize> = {
     "1:1": { height: 1024, value: "1024*1024", width: 1024 },
     "3:4": { height: 1296, value: "768*1024", width: 768 },
@@ -780,15 +1073,31 @@ function resolveAspectRatio(value: string | undefined) {
 }
 
 function appendVariantPrompt(prompt: string, index: number, count: number) {
+  if (count <= 1) {
+    return prompt;
+  }
+
   return `${prompt}\nGenerate variant ${index + 1} of ${count}; keep the same brief but change composition, lighting, or camera distance.`;
 }
 
 function readPosterAttribute(poster: PosterRecord, key: string) {
-  return isPosterAttributeKey(key) ? poster.attributes[key] : "";
-}
+  const drawAttributeMap: Record<string, string> = {
+    atmosphere: poster.attributes.mood,
+    character: poster.attributes.character,
+    characterPosition: poster.attributes.composition,
+    composition: poster.attributes.composition,
+    era: `${poster.year}${poster.region ? ` / ${poster.region}` : ""}`,
+    event: "",
+    mood: poster.attributes.mood,
+    proportion: poster.attributes.ratio,
+    ratio: poster.attributes.ratio,
+    scene: poster.description,
+    shotScale: poster.attributes.character,
+    style: poster.attributes.style,
+    tone: poster.attributes.tone
+  };
 
-function isPosterAttributeKey(key: string): key is keyof PosterRecord["attributes"] {
-  return ["character", "composition", "mood", "ratio", "style", "tone"].includes(key);
+  return drawAttributeMap[key] ?? "";
 }
 
 function toErrorMessage(error: unknown) {
@@ -801,4 +1110,153 @@ function readRecord(value: unknown) {
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isDashScopeWan27Model(model: string) {
+  return model.startsWith("wan2.7-image");
+}
+
+function buildWan27DashScopePayload(input: {
+  count: number;
+  model: ResolvedModel;
+  prompt: string;
+  size: ResolvedSize;
+}) {
+  return {
+    input: {
+      messages: [
+        {
+          content: [
+            {
+              text: input.prompt
+            }
+          ],
+          role: "user"
+        }
+      ]
+    },
+    model: input.model.externalModel,
+    parameters: {
+      n: input.count,
+      size: input.size.value,
+      thinking_mode: true,
+      watermark: false
+    }
+  };
+}
+
+function buildLegacyDashScopePayload(input: {
+  count: number;
+  model: ResolvedModel;
+  prompt: string;
+  size: ResolvedSize;
+}) {
+  return {
+    input: { prompt: input.prompt },
+    model: input.model.externalModel,
+    parameters: {
+      n: input.count,
+      size: input.size.value
+    }
+  };
+}
+
+function extractDashScopeImageUrls(output: JsonRecord) {
+  const urls: string[] = [];
+
+  if (Array.isArray(output.results)) {
+    for (const result of output.results) {
+      if (!isRecord(result)) {
+        continue;
+      }
+
+      const url = result.url;
+
+      if (typeof url === "string" && url.trim()) {
+        urls.push(url);
+      }
+    }
+  }
+
+  if (Array.isArray(output.choices)) {
+    for (const choice of output.choices) {
+      if (!isRecord(choice)) {
+        continue;
+      }
+
+      const message = readRecord(choice.message);
+      const content = message?.content;
+
+      if (!Array.isArray(content)) {
+        continue;
+      }
+
+      for (const item of content) {
+        if (!isRecord(item)) {
+          continue;
+        }
+
+        const image = item.image;
+
+        if (typeof image === "string" && image.trim()) {
+          urls.push(image);
+        }
+      }
+    }
+  }
+
+  return urls;
+}
+
+function createProgressEmitter(onProgress: WorkspaceGenerationProgressHandler | undefined) {
+  return (event: WorkspaceGenerationProgressDraft) => {
+    onProgress?.({
+      ...event,
+      timestamp: new Date().toISOString()
+    });
+  };
+}
+
+function readDashScopeMetrics(output: JsonRecord, response: JsonRecord) {
+  const metrics = readRecord(output.task_metrics);
+  const usage = readRecord(response.usage);
+  const usageImageCount = readMetric(usage, "image_count");
+  const total = readMetric(metrics, "TOTAL", "total") ?? usageImageCount;
+  const succeeded = readMetric(metrics, "SUCCEEDED", "succeeded") ?? (output.task_status === "SUCCEEDED" ? usageImageCount : undefined);
+
+  return {
+    succeeded,
+    total
+  };
+}
+
+function readMetric(record: JsonRecord | null, ...keys: string[]) {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "number") {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+
+  return undefined;
+}
+
+function formatDashScopeProgressMessage(
+  label: string,
+  taskStatus: string,
+  succeeded: number | undefined,
+  total: number | undefined,
+  attempt: number
+) {
+  const countText = typeof succeeded === "number" && typeof total === "number" ? `，已完成 ${succeeded}/${total}` : "";
+  return `${label} 任务状态：${taskStatus}${countText}，第 ${attempt} 次轮询。`;
 }

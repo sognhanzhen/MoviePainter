@@ -15,9 +15,10 @@ export function AppShell() {
   const isWorkspace = location.pathname === "/workspace";
   const isCinematicShell =
     location.pathname === "/workspace" || location.pathname === "/library" || location.pathname.startsWith("/history");
+  useCinematicSwipeHistoryLock(isCinematicShell);
 
   const shellClassName = isCinematicShell
-    ? "relative min-h-screen overflow-x-hidden bg-[#0d0e0d] text-neutral-100"
+    ? "cinematic-shell-gesture-lock relative min-h-screen overflow-x-hidden bg-[#0d0e0d] text-neutral-100"
     : "min-h-screen bg-[radial-gradient(circle_at_top,rgba(75,167,255,0.14),transparent_28%),linear-gradient(180deg,#f8f6f1_0%,#efe8dd_100%)] text-slate-950";
 
   const workspaceNavigationItems = [
@@ -32,7 +33,7 @@ export function AppShell() {
         <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_top_right,rgba(46,50,53,0.62)_0%,rgba(13,14,13,0.72)_42%,rgba(4,7,7,0.98)_100%)]" />
         <div className="workspace-film-grain pointer-events-none fixed inset-0 z-0" />
         <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle,transparent_0%,rgba(0,0,0,0.46)_100%)]" />
-        <div className="workspace-nav-veil pointer-events-none fixed top-0 right-0 left-0 z-40 h-[8.5rem]" />
+        <div className="workspace-nav-veil pointer-events-none fixed top-0 right-0 left-0 z-40 h-20" />
 
         <header className="fixed top-0 right-0 left-0 z-50 bg-transparent">
           <div className="grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 sm:px-8">
@@ -130,6 +131,55 @@ export function AppShell() {
       </main>
     </div>
   );
+}
+
+function useCinematicSwipeHistoryLock(active: boolean) {
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const edgeWidth = 56;
+    const horizontalThreshold = 12;
+    let gestureStartedAtEdge = false;
+    let startX = 0;
+    let startY = 0;
+
+    function handleTouchStart(event: TouchEvent) {
+      if (event.touches.length !== 1) {
+        gestureStartedAtEdge = false;
+        return;
+      }
+
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      gestureStartedAtEdge = startX <= edgeWidth || startX >= window.innerWidth - edgeWidth;
+    }
+
+    function handleTouchMove(event: TouchEvent) {
+      if (!gestureStartedAtEdge || event.touches.length !== 1) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      const isHorizontalSwipe = Math.abs(deltaX) > horizontalThreshold && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+
+      if (isHorizontalSwipe && event.cancelable) {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [active]);
 }
 
 function AvatarMenu({

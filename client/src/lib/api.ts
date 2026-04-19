@@ -5,6 +5,7 @@ import type {
   HistoryRecordDetail,
   PosterRecord,
   WorkspaceAssetAction,
+  WorkspaceGenerationProgressEvent,
   UserSettingsInput,
   UserSettingsRecord,
   WorkspaceGenerationResponse
@@ -75,6 +76,17 @@ type AdminDashboardResponse = {
 
 type RequestOptions = RequestInit & {
   token?: string;
+};
+
+type WorkspaceGeneratePayload = {
+  mode: "chat" | "draw";
+  modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
+  moduleWeights: Record<string, number>;
+  posterId: string;
+  prompt: string;
+  ratioId?: string;
+  sourceOrigin?: string;
+  selectedModules: string[];
 };
 
 async function request<T>(path: string, options?: RequestOptions): Promise<T> {
@@ -190,24 +202,113 @@ export const workspaceRequest = {
   },
   async generate(
     token: string,
-    payload: {
-      mode: "chat" | "draw";
-      modelId?: "doubao-seedance-5" | "nano-banana-2" | "wan2.7-image-pro";
-      moduleWeights: Record<string, number>;
-      posterId: string;
-      prompt: string;
-      ratioId?: string;
-      sourceOrigin?: string;
-      selectedModules: string[];
-    }
+    payload: WorkspaceGeneratePayload
   ) {
     return request<WorkspaceGenerationResponse>("/workspace/generate", {
       body: JSON.stringify(payload),
       method: "POST",
       token
     });
+  },
+  async generateStream(
+    token: string,
+    payload: WorkspaceGeneratePayload,
+    onProgress: (event: WorkspaceGenerationProgressEvent) => void
+  ) {
+    const response = await fetch(`${API_BASE_URL}/workspace/generate/stream`, {
+      body: JSON.stringify(payload),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as ApiError;
+      throw new Error(data.message ?? "Request failed");
+    }
+
+    if (!response.body) {
+      return request<WorkspaceGenerationResponse>("/workspace/generate", {
+        body: JSON.stringify(payload),
+        method: "POST",
+        token
+      });
+    }
+
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = "";
+    let finalResponse: WorkspaceGenerationResponse | null = null;
+    let streamError: Error | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      const chunks = buffer.split(/\n\n|\r\n\r\n/);
+      buffer = chunks.pop() ?? "";
+
+      for (const chunk of chunks) {
+        const event = parseServerSentEvent(chunk);
+
+        if (!event) {
+          continue;
+        }
+
+        if (event.event === "progress") {
+          onProgress(event.data as WorkspaceGenerationProgressEvent);
+        } else if (event.event === "result") {
+          finalResponse = event.data as WorkspaceGenerationResponse;
+        } else if (event.event === "error") {
+          const payload = event.data as ApiError;
+          streamError = new Error(payload.message ?? "AI 图片生成失败");
+        }
+      }
+
+      if (done) {
+        break;
+      }
+    }
+
+    if (streamError) {
+      throw streamError;
+    }
+
+    if (!finalResponse) {
+      throw new Error("生图响应没有返回结果");
+    }
+
+    return finalResponse;
   }
 };
+
+function parseServerSentEvent(chunk: string) {
+  const lines = chunk.split(/\r?\n/);
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  return {
+    data: JSON.parse(dataLines.join("\n")) as unknown,
+    event
+  };
+}
 
 export const adminRequest = {
   async getDashboard(token: string) {

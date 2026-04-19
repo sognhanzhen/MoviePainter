@@ -2,6 +2,25 @@ export type AppDataSource = "local-db" | "local-demo" | "supabase";
 
 export type WorkspaceMode = "chat" | "draw";
 
+export type PosterDrawDimensionKey =
+  | "shotScale"
+  | "characterPosition"
+  | "event"
+  | "era"
+  | "scene"
+  | "style"
+  | "atmosphere"
+  | "tone"
+  | "composition";
+
+export type PosterPromptPresets = {
+  aiChat: string;
+  aiDraw: {
+    dimensions: Record<PosterDrawDimensionKey, string>;
+    prompt: string;
+  };
+};
+
 export type AuthenticatedUser =
   | {
       createdAt: string;
@@ -38,6 +57,7 @@ export type PosterRecord = {
   imdbId?: string;
   layout: "featured" | "square" | "tall" | "wide";
   posterCount?: number;
+  promptPresets?: PosterPromptPresets;
   region: string;
   releaseDate?: string;
   summary: string;

@@ -78,6 +78,14 @@ function buildWorkspaceAssetPrompt(input: {
   mode: WorkspaceMode;
   poster: PosterRecord;
 }) {
+  if (input.mode === "chat" && input.poster.promptPresets?.aiChat) {
+    return input.poster.promptPresets.aiChat;
+  }
+
+  if (input.mode === "draw" && input.poster.promptPresets?.aiDraw.prompt) {
+    return input.poster.promptPresets.aiDraw.prompt;
+  }
+
   const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
   const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
 

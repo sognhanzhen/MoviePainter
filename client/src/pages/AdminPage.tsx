@@ -156,7 +156,7 @@ export function AdminPage() {
                   <h3 className="mt-2 text-2xl font-semibold text-slate-950">官方精选海报管理</h3>
                 </div>
                 <p className="max-w-md text-sm leading-6 text-slate-600">
-                  先管理精选海报的发布状态、推荐状态和当前编辑项，再进入右侧详情面板维护具体文案与六个参数。
+                  先管理精选海报的发布状态、推荐状态和当前编辑项，再进入右侧详情面板维护具体文案与 AI Draw 维度。
                 </p>
               </div>
 

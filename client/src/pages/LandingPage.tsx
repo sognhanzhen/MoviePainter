@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { MouseEvent, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { AuthPanel, type AuthPanelMode } from "../components/AuthPanel";
 
 const defaultWorkspacePath = "/workspace?mode=chat";
 
@@ -50,9 +51,70 @@ const accountCards = [
 
 export function LandingPage() {
   const { status } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const primaryCtaHref = status === "authenticated" ? defaultWorkspacePath : "/login";
-  const secondaryCtaHref = status === "authenticated" ? "/history" : "/register";
+  const primaryCtaHref = status === "authenticated" ? defaultWorkspacePath : "/";
+  const [authPanel, setAuthPanel] = useState<{ mode: AuthPanelMode; redirectPath: string } | null>(null);
+
+  function handleProtectedLink(event: MouseEvent<HTMLAnchorElement>, redirectPath: string, mode: AuthPanelMode = "login") {
+    if (status !== "guest") {
+      return;
+    }
+
+    event.preventDefault();
+    setAuthPanel({ mode, redirectPath });
+  }
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      setAuthPanel(null);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "guest") {
+      return;
+    }
+
+    const state = location.state;
+
+    if (!state || typeof state !== "object" || !("from" in state)) {
+      return;
+    }
+
+    const redirectPath = typeof state.from === "string" && state.from ? state.from : defaultWorkspacePath;
+    const mode = "authMode" in state && state.authMode === "register" ? "register" : "login";
+
+    setAuthPanel({ mode, redirectPath });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, status]);
+
+  useEffect(() => {
+    if (!authPanel) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAuthPanel(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [authPanel]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -144,40 +206,48 @@ export function LandingPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_18%,rgba(10,10,10,0.62)_74%,#0a0a0a_100%)]" />
       </div>
 
-      <nav className="fixed top-0 right-0 left-0 z-50 flex items-center justify-between px-6 py-5 sm:px-8">
-        <Link
-          to="/"
-          className="flex-1 font-[var(--font-display)] text-lg font-bold tracking-[0.16em] text-white uppercase transition hover:text-white/78"
-        >
-          MoviePainter
-        </Link>
-        <div className="hidden items-center justify-center gap-10 md:flex">
-          {portalCards.map((portal) => (
+      <div className="workspace-nav-veil pointer-events-none fixed top-0 right-0 left-0 z-40 h-20" />
+      <header className="fixed top-0 right-0 left-0 z-50 bg-transparent">
+        <div className="grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 sm:px-8">
+          <Link
+            to="/"
+            className="font-[var(--font-display)] text-2xl font-bold tracking-[-0.055em] text-neutral-100 transition hover:text-white"
+          >
+            MoviePainter
+          </Link>
+
+          <nav className="hidden items-center justify-center gap-10 md:flex">
+            {portalCards.map((portal) => (
+              <Link
+                key={portal.title}
+                to={portal.href}
+                onClick={(event) => handleProtectedLink(event, portal.href)}
+                className="relative text-sm font-semibold text-neutral-500 transition hover:text-neutral-100"
+              >
+                {portal.title === "Movie Poster Library" ? "Library" : portal.title === "Generation Workspace" ? "Workspace" : "Assets"}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="flex items-center justify-end gap-4">
             <Link
-              key={portal.title}
-              to={portal.href}
-              className="font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white/60 uppercase transition hover:text-white"
+              to={status === "authenticated" ? "/settings" : "/"}
+              onClick={(event) => handleProtectedLink(event, "/settings")}
+              className="hidden rounded-lg border border-white/10 px-3 py-2 text-xs font-bold tracking-[0.18em] text-neutral-500 uppercase transition hover:border-white/22 hover:text-neutral-100 sm:inline-flex"
             >
-              {portal.title === "Movie Poster Library" ? "Library" : portal.title === "Generation Workspace" ? "Workspace" : "Assets"}
+              Account
             </Link>
-          ))}
+            <Link
+              to={status === "authenticated" ? "/settings" : "/"}
+              onClick={(event) => handleProtectedLink(event, "/settings")}
+              aria-label="Open account"
+              className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/6 text-sm font-bold tracking-[0.12em] text-neutral-100 uppercase shadow-[0_16px_34px_rgba(0,0,0,0.28)] transition hover:border-white/20 hover:bg-white/10"
+            >
+              MP
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-1 items-center justify-end gap-4">
-          <Link
-            to={status === "authenticated" ? "/settings" : "/login"}
-            className="hidden rounded-lg border border-white/10 px-3 py-2 font-[var(--font-display)] text-[10px] font-bold tracking-[0.18em] text-white/58 uppercase transition hover:border-white/22 hover:text-white sm:inline-flex"
-          >
-            Account
-          </Link>
-          <Link
-            to={status === "authenticated" ? "/settings" : "/login"}
-            aria-label="Open account"
-            className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-sm font-bold tracking-[0.12em] text-white transition hover:border-white/40 hover:bg-white/16"
-          >
-            MP
-          </Link>
-        </div>
-      </nav>
+      </header>
 
       <header className="relative z-10 flex min-h-[88vh] items-center justify-center overflow-hidden px-4 pt-24 text-center">
         <div className="mx-auto max-w-5xl">
@@ -189,18 +259,13 @@ export function LandingPage() {
           <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-white/68 sm:text-xl">
             From storyboard to poster art, curate the cinematic language of your next production.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
+          <div className="mt-10 flex items-center justify-center">
             <Link
               to={primaryCtaHref}
-              className="inline-flex h-12 min-w-[11rem] items-center justify-center rounded-lg bg-white px-8 text-sm font-bold text-black shadow-[0_0_30px_rgba(255,255,255,0.18)] transition hover:scale-105 hover:bg-white/90 active:scale-95"
+              onClick={(event) => handleProtectedLink(event, defaultWorkspacePath)}
+              className="inline-flex h-12 min-w-[11rem] items-center justify-center rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 font-[var(--font-ui)] text-sm font-extrabold text-white shadow-[0_10px_30px_rgba(229,9,20,0.28)] transition hover:scale-[1.02] active:scale-95"
             >
               Start Creating
-            </Link>
-            <Link
-              to={secondaryCtaHref}
-              className="inline-flex h-12 min-w-[11rem] items-center justify-center border-b border-white/24 px-8 font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white uppercase transition hover:border-white hover:text-white/82"
-            >
-              Explore Assets
             </Link>
           </div>
         </div>
@@ -225,6 +290,7 @@ export function LandingPage() {
               <Link
                 key={portal.title}
                 to={portal.href}
+                onClick={(event) => handleProtectedLink(event, portal.href)}
                 className="group relative flex aspect-[3/4] overflow-hidden rounded-lg border border-white/10 bg-white/5 p-8 transition duration-500 hover:scale-[1.02] hover:border-white/20 hover:bg-white/8"
               >
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/22 to-transparent" />
@@ -257,7 +323,8 @@ export function LandingPage() {
                 Manage your creative profile, production credits, and personalized curation settings.
               </p>
               <Link
-                to={status === "authenticated" ? "/settings" : "/register"}
+                to={status === "authenticated" ? "/settings" : "/"}
+                onClick={(event) => handleProtectedLink(event, "/settings", "register")}
                 className="mt-8 flex items-center gap-4 rounded-lg border border-white/10 bg-white/5 p-4 backdrop-blur-md transition hover:bg-white/10"
               >
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
@@ -281,7 +348,8 @@ export function LandingPage() {
               {accountCards.map((card) => (
                 <Link
                   key={card.title}
-                  to={status === "authenticated" ? "/settings" : "/register"}
+                  to={status === "authenticated" ? "/settings" : "/"}
+                  onClick={(event) => handleProtectedLink(event, "/settings", "register")}
                   className="group rounded-lg border border-white/10 bg-white/5 p-8 backdrop-blur-md transition duration-300 hover:border-white/20 hover:bg-white/10"
                 >
                   <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-white/10 font-[var(--font-display)] text-sm font-bold text-white transition group-hover:bg-white group-hover:text-black">
@@ -323,6 +391,47 @@ export function LandingPage() {
           </footer>
         </section>
       </main>
+
+      {authPanel ? (
+        <LandingAuthModal
+          mode={authPanel.mode}
+          redirectPath={authPanel.redirectPath}
+          onClose={() => setAuthPanel(null)}
+          onModeChange={(mode) => setAuthPanel((current) => (current ? { ...current, mode } : current))}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LandingAuthModal({
+  mode,
+  onClose,
+  onModeChange,
+  redirectPath
+}: {
+  mode: AuthPanelMode;
+  onClose: () => void;
+  onModeChange: (mode: AuthPanelMode) => void;
+  redirectPath: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#0b0c0c]/78 px-4 py-4 backdrop-blur-[18px] md:py-20">
+      <div className="pointer-events-none absolute inset-0 opacity-40">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(32,31,31,0.88)_0%,rgba(10,10,10,0.96)_68%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(255,180,170,0.08),transparent_28%,rgba(229,9,20,0.08)_70%,transparent)]" />
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:4px_4px]" />
+
+      <div className="relative z-10 flex w-full justify-center">
+        <AuthPanel
+          mode={mode}
+          onClose={onClose}
+          onModeChange={onModeChange}
+          redirectPath={redirectPath}
+        />
+      </div>
     </div>
   );
 }

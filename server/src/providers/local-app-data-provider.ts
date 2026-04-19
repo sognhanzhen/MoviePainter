@@ -14,7 +14,11 @@ import type {
   WorkspaceGenerationResponse
 } from "../domain/app-data.js";
 import type { LocalDatabase } from "../lib/local-database.js";
-import { generateWorkspaceImages, type AicanapiImageGeneratorConfig } from "../services/aicanapi-image-generator.js";
+import {
+  generateWorkspaceImages,
+  type AicanapiImageGeneratorConfig,
+  type WorkspaceGenerationProgressHandler
+} from "../services/aicanapi-image-generator.js";
 
 type CreateLocalAppDataProviderInput = {
   database: LocalDatabase;
@@ -23,7 +27,11 @@ type CreateLocalAppDataProviderInput = {
 
 export function createLocalAppDataProvider({ database, imageGeneratorConfig }: CreateLocalAppDataProviderInput) {
   return {
-    async generateWorkspace(input: { generation: WorkspaceGenerationInput; user: AuthenticatedUser }): Promise<ProviderResult<WorkspaceGenerationResponse>> {
+    async generateWorkspace(input: {
+      generation: WorkspaceGenerationInput;
+      onProgress?: WorkspaceGenerationProgressHandler;
+      user: AuthenticatedUser;
+    }): Promise<ProviderResult<WorkspaceGenerationResponse>> {
       if (input.user.kind !== "local") {
         throw new Error("本地兜底链路只支持 local JWT 用户");
       }
@@ -33,9 +41,18 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
       const generated = await generateWorkspaceImages({
         config: imageGeneratorConfig,
         generation: input.generation,
+        onProgress: input.onProgress,
         poster
       });
       const results = generated.results;
+
+      input.onProgress?.({
+        imageCount: results.length,
+        message: "正在保存生成记录与图片结果。",
+        phase: "saving",
+        timestamp: new Date().toISOString(),
+        totalImages: results.length
+      });
 
       const record = database.createGenerationRecord({
         mode: input.generation.mode,
@@ -48,16 +65,18 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
       });
 
       if (input.generation.mode === "draw") {
-        const firstModule = input.generation.selectedModules[0] ?? null;
+        const selectedModules = new Set(input.generation.selectedModules);
         database.createGenerationDrawInput({
-          aspectRatioValue: firstModule ? poster.attributes.ratio : null,
-          characterValue: firstModule ? poster.attributes.character : null,
-          compositionValue: firstModule ? poster.attributes.composition : null,
+          aspectRatioValue: input.generation.ratioId ?? null,
+          characterValue: selectedModules.has("shotScale") || selectedModules.has("characterPosition") || selectedModules.has("character")
+            ? input.generation.prompt
+            : null,
+          compositionValue: selectedModules.has("composition") ? poster.attributes.composition : null,
           generationId: record.id,
-          moodValue: firstModule ? poster.attributes.mood : null,
+          moodValue: selectedModules.has("atmosphere") || selectedModules.has("mood") ? poster.attributes.mood : null,
           selectedModules: input.generation.selectedModules,
-          styleValue: firstModule ? poster.attributes.style : null,
-          toneValue: firstModule ? poster.attributes.tone : null,
+          styleValue: selectedModules.has("style") ? poster.attributes.style : null,
+          toneValue: selectedModules.has("tone") ? poster.attributes.tone : null,
           weights: input.generation.moduleWeights
         });
       }
@@ -73,6 +92,14 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
           title: result.title,
           width: generated.width
         });
+      });
+
+      input.onProgress?.({
+        imageCount: results.length,
+        message: `已保存 ${results.length} 张生成图。`,
+        phase: "succeeded",
+        timestamp: new Date().toISOString(),
+        totalImages: results.length
       });
 
       return {
@@ -218,6 +245,14 @@ export function createLocalAppDataProvider({ database, imageGeneratorConfig }: C
 }
 
 function buildWorkspaceAssetPrompt(input: WorkspaceAssetRecordInput, poster: PosterRecord) {
+  if (input.mode === "chat" && poster.promptPresets?.aiChat) {
+    return poster.promptPresets.aiChat;
+  }
+
+  if (input.mode === "draw" && poster.promptPresets?.aiDraw.prompt) {
+    return poster.promptPresets.aiDraw.prompt;
+  }
+
   const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
   const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
 
