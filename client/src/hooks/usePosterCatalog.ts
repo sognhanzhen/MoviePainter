@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { posterRecords, type AppDataSource, type PosterRecord } from "../data/posters";
 import { getPosterPromptPreset } from "../data/poster-prompt-presets";
+import { useI18n } from "../i18n/useI18n";
 import { appDataRequest } from "../lib/api";
 
 const POSTER_CACHE_KEY = "moviepainter-poster-catalog-prompts-v1";
@@ -49,6 +50,7 @@ const initialState: PosterCatalogState = {
 };
 
 export function usePosterCatalog(token: string) {
+  const { language } = useI18n();
   const cached = readPosterCache();
   const [state, setState] = useState<PosterCatalogState>(
     cached
@@ -85,7 +87,14 @@ export function usePosterCatalog(token: string) {
         }
 
         setState({
-          error: error instanceof Error ? `${error.message}，当前先展示本地演示海报。` : "海报库加载失败，当前先展示本地演示海报。",
+          error:
+            error instanceof Error
+              ? language === "zh-CN"
+                ? `${error.message}，当前先展示本地演示海报。`
+                : `${error.message}. Showing local demo posters for now.`
+              : language === "zh-CN"
+                ? "海报库加载失败，当前先展示本地演示海报。"
+                : "Poster library failed to load. Showing local demo posters for now.",
           loading: false,
           posters: withPromptPresets(posterRecords),
           source: "local-demo"
@@ -108,7 +117,7 @@ export function usePosterCatalog(token: string) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [language, token]);
 
   return state;
 }

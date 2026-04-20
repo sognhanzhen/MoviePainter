@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-
-const navigationItems = [
-  { label: "生成工作区", path: "/workspace?mode=chat" },
-  { label: "海报库", path: "/library" },
-  { label: "历史记录", path: "/history" },
-  { label: "个人设置", path: "/settings" }
-];
+import { SUPPORTED_LANGUAGES, type Language } from "../i18n/messages";
+import { useI18n } from "../i18n/useI18n";
 
 export function AppShell() {
   const { logout, user } = useAuth();
+  const { language, t } = useI18n();
   const location = useLocation();
   const isWorkspace = location.pathname === "/workspace";
   const isCinematicShell =
@@ -18,13 +14,19 @@ export function AppShell() {
   useCinematicSwipeHistoryLock(isCinematicShell);
 
   const shellClassName = isCinematicShell
-    ? "cinematic-shell-gesture-lock relative min-h-screen overflow-x-hidden bg-[#0d0e0d] text-neutral-100"
-    : "min-h-screen bg-[radial-gradient(circle_at_top,rgba(75,167,255,0.14),transparent_28%),linear-gradient(180deg,#f8f6f1_0%,#efe8dd_100%)] text-slate-950";
+    ? "cinematic-shell-gesture-lock relative min-h-dvh overflow-x-hidden bg-[#0d0e0d] text-neutral-100"
+    : "min-h-dvh bg-[radial-gradient(circle_at_top,rgba(75,167,255,0.14),transparent_28%),linear-gradient(180deg,#f8f6f1_0%,#efe8dd_100%)] text-slate-950";
 
+  const navigationItems = [
+    { label: t("nav.workspace"), path: "/workspace?mode=chat" },
+    { label: t("nav.library"), path: "/library" },
+    { label: t("nav.history"), path: "/history" },
+    { label: t("nav.settings"), path: "/settings" }
+  ];
   const workspaceNavigationItems = [
-    { label: "Library", path: "/library" },
-    { label: "Workspace", path: "/workspace?mode=chat" },
-    { label: "Assets", path: "/history" }
+    { label: t("nav.library"), path: "/library" },
+    { label: t("nav.workspace"), path: "/workspace?mode=chat" },
+    { label: t("nav.assets"), path: "/history" }
   ];
 
   if (isCinematicShell) {
@@ -36,12 +38,12 @@ export function AppShell() {
         <div className="workspace-nav-veil pointer-events-none fixed top-0 right-0 left-0 z-40 h-20" />
 
         <header className="fixed top-0 right-0 left-0 z-50 bg-transparent">
-          <div className="grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 sm:px-8">
+          <div className="grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-8">
             <NavLink
               to="/workspace?mode=chat"
               className="font-[var(--font-display)] text-2xl font-bold tracking-[-0.055em] text-neutral-100 transition hover:text-white"
             >
-              MoviePainter
+              {t("brand.name")}
             </NavLink>
 
             <nav className="hidden items-center justify-center gap-10 md:flex">
@@ -69,16 +71,33 @@ export function AppShell() {
 
             <div className="flex items-center justify-end">
               <AvatarMenu
-                displayName={user?.name ?? "MoviePainter User"}
+                displayName={user?.name ?? t("common.userFallback")}
                 email={user?.email}
                 onLogout={logout}
                 tone="dark"
               />
             </div>
           </div>
+          <nav className="flex gap-2 overflow-x-auto px-4 pb-3 [-webkit-overflow-scrolling:touch] md:hidden">
+            {workspaceNavigationItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                    isActive
+                      ? "border-[#ffb4aa]/45 bg-[#ffb4aa]/16 text-white"
+                      : "border-white/8 bg-white/6 text-neutral-400 hover:bg-white/10 hover:text-neutral-100"
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
         </header>
 
-        <main className="relative z-10 mx-auto w-full max-w-7xl px-6 pt-32 pb-24">
+        <main className="relative z-10 mx-auto w-full max-w-7xl px-4 pt-36 pb-24 sm:px-6 md:pt-32">
           <Outlet />
         </main>
       </div>
@@ -94,8 +113,10 @@ export function AppShell() {
               MP
             </div>
             <div>
-              <p className="text-[11px] tracking-[0.32em] text-sky-700 uppercase">MoviePainter</p>
-              <h1 className="text-lg font-semibold text-slate-950">AI Movie Poster Studio</h1>
+              <p className="text-[11px] tracking-[0.32em] text-sky-700 uppercase">{t("brand.name")}</p>
+              <h1 className="text-lg font-semibold text-slate-950">
+                {language === "zh-CN" ? "AI 电影海报工作室" : "AI Movie Poster Studio"}
+              </h1>
             </div>
           </div>
 
@@ -117,13 +138,30 @@ export function AppShell() {
 
           <div className="flex items-center justify-end">
             <AvatarMenu
-              displayName={user?.name ?? "MoviePainter User"}
+              displayName={user?.name ?? t("common.userFallback")}
               email={user?.email}
               onLogout={logout}
               tone="light"
             />
           </div>
         </div>
+        <nav className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 pb-4 [-webkit-overflow-scrolling:touch] sm:px-8 md:hidden">
+          {navigationItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                  isActive
+                    ? "border-slate-950 bg-slate-950 text-white"
+                    : "border-slate-900/8 bg-white/70 text-slate-600 hover:bg-white hover:text-slate-950"
+                }`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-8">
@@ -193,6 +231,7 @@ function AvatarMenu({
   onLogout: () => void;
   tone: "dark" | "light";
 }) {
+  const { language, setLanguage, t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const initials = getAvatarInitials(displayName, email);
@@ -244,7 +283,7 @@ function AvatarMenu({
         type="button"
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="打开用户菜单"
+        aria-label={t("avatar.openMenu")}
         onClick={() => setOpen((current) => !current)}
         className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border text-sm font-bold tracking-[0.12em] uppercase transition ${buttonClassName}`}
       >
@@ -254,15 +293,47 @@ function AvatarMenu({
       {open ? (
         <div
           role="menu"
-          className={`absolute right-0 z-[70] mt-3 w-56 overflow-hidden rounded-lg border p-2 backdrop-blur-xl ${panelClassName}`}
+          className={`absolute right-0 z-[70] mt-3 w-[min(14rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border p-2 backdrop-blur-xl ${panelClassName}`}
         >
           <div className="px-3 py-3">
-            <p className={`text-[10px] font-bold tracking-[0.24em] uppercase ${eyebrowClassName}`}>Current User</p>
+            <p className={`text-[10px] font-bold tracking-[0.24em] uppercase ${eyebrowClassName}`}>{t("avatar.currentUser")}</p>
             <p className="mt-1 truncate text-sm font-semibold">{displayName}</p>
             {email ? <p className={`mt-1 truncate text-xs ${eyebrowClassName}`}>{email}</p> : null}
           </div>
 
           <div className={isDark ? "h-px bg-white/8" : "h-px bg-slate-900/8"} />
+
+          <div className="mt-2 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className={`text-[10px] font-bold tracking-[0.18em] uppercase ${eyebrowClassName}`}>{t("avatar.language")}</span>
+              <div
+                role="group"
+                aria-label={t("avatar.language")}
+                className={isDark ? "flex rounded-md bg-white/7 p-0.5" : "flex rounded-md bg-slate-950/6 p-0.5"}
+              >
+                {SUPPORTED_LANGUAGES.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-label={item === "en-US" ? t("avatar.languageEnglishLabel") : t("avatar.languageChineseLabel")}
+                    aria-pressed={language === item}
+                    onClick={() => setLanguage(item as Language)}
+                    className={`h-7 min-w-9 cursor-pointer rounded-[0.35rem] px-2 text-[11px] font-black uppercase transition ${
+                      language === item
+                        ? isDark
+                          ? "bg-neutral-100 text-slate-950"
+                          : "bg-slate-950 text-white"
+                        : isDark
+                          ? "text-neutral-400 hover:text-white"
+                          : "text-slate-500 hover:text-slate-950"
+                    }`}
+                  >
+                    {item === "en-US" ? t("avatar.languageEnglish") : t("avatar.languageChinese")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
           <Link
             role="menuitem"
@@ -270,7 +341,7 @@ function AvatarMenu({
             onClick={() => setOpen(false)}
             className={`mt-2 flex w-full items-center justify-between rounded-md px-3 py-2.5 text-sm font-semibold transition ${itemClassName}`}
           >
-            设置
+            {t("avatar.settings")}
             <span aria-hidden="true">›</span>
           </Link>
 
@@ -283,7 +354,7 @@ function AvatarMenu({
             }}
             className={`mt-1 flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-semibold transition ${logoutClassName}`}
           >
-            退出登录
+            {t("avatar.logout")}
             <span aria-hidden="true">↗</span>
           </button>
         </div>

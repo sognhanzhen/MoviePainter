@@ -196,7 +196,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const nextToken = data.session?.access_token ?? "";
 
     if (!nextUser || !nextToken) {
-      throw new Error("Supabase 登录成功，但没有拿到会话信息。");
+      throw new Error("Supabase sign-in succeeded, but no session information was returned.");
     }
 
     setToken(nextToken);
@@ -265,7 +265,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const nextToken = session?.access_token ?? "";
 
     if (!nextUser || !nextToken) {
-      throw new Error("Supabase 注册成功，但没有拿到会话信息。");
+      throw new Error("Supabase registration succeeded, but no session information was returned.");
     }
 
     setToken(nextToken);

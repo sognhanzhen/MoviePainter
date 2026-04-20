@@ -178,7 +178,7 @@ export async function saveHistoryRecordSnapshot(
   }
 
   cache[record.id] = {
-    insight: input.insight ?? "这条历史资产记录来自工作区参考海报操作。",
+    insight: input.insight ?? "This history asset record came from a workspace reference-poster action.",
     record,
     results: input.results ?? [],
     savedAt: new Date().toISOString(),
@@ -192,7 +192,7 @@ export async function saveHistoryRecordSnapshot(
       submittedAt: record.createdAt,
       appliedModules: [],
       moduleWeights: {},
-      posterTitle: record.previewTitle ?? "参考海报"
+      posterTitle: record.previewTitle ?? "Reference poster"
     }
   };
 

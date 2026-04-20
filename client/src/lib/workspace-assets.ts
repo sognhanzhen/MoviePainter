@@ -87,11 +87,11 @@ function buildWorkspaceAssetPrompt(input: {
   }
 
   const modeLabel = input.mode === "chat" ? "AI Chat" : "AI Draw";
-  const originText = input.action === "library_use" ? "从海报库" : "从生成工作区";
+  const originText = input.action === "library_use" ? "the poster library" : "the generation workspace";
 
-  return `${originText}将《${input.poster.title}》作为 ${modeLabel} 参考资产加入工作区。`;
+  return `Add ${input.poster.title} from ${originText} to the ${modeLabel} workspace as a reference asset.`;
 }
 
 function buildWorkspaceAssetInsight(record: HistoryRecord) {
-  return `参考海报已进入 ${record.mode === "chat" ? "AI Chat" : "AI Draw"} 工作区，等待继续生成。`;
+  return `The reference poster is now in the ${record.mode === "chat" ? "AI Chat" : "AI Draw"} workspace and ready for the next generation.`;
 }

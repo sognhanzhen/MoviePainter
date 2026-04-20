@@ -46,7 +46,7 @@ begin
   values (
     new.id,
     'chat',
-    'zh-CN',
+    'en-US',
     true
   )
   on conflict (user_id) do nothing;
@@ -69,7 +69,7 @@ create table if not exists public.user_settings (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references public.user_profiles(id) on delete cascade,
   preferred_default_mode text not null default 'chat' check (preferred_default_mode in ('chat', 'draw')),
-  language text not null default 'zh-CN',
+  language text not null default 'en-US',
   notification_enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

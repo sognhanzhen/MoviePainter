@@ -166,7 +166,7 @@ export function createLocalDatabase(databasePath: string): LocalDatabase {
       user_id INTEGER PRIMARY KEY,
       display_name TEXT NOT NULL,
       preferred_default_mode TEXT NOT NULL DEFAULT 'chat',
-      language TEXT NOT NULL DEFAULT 'zh-CN',
+      language TEXT NOT NULL DEFAULT 'en-US',
       notification_enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -240,7 +240,7 @@ export function createLocalDatabase(databasePath: string): LocalDatabase {
 
     database
       .prepare(
-        "INSERT INTO user_settings (user_id, display_name, preferred_default_mode, language, notification_enabled) VALUES (?, ?, 'chat', 'zh-CN', 1)"
+        "INSERT INTO user_settings (user_id, display_name, preferred_default_mode, language, notification_enabled) VALUES (?, ?, 'chat', 'en-US', 1)"
       )
       .run(user.id, user.name);
 

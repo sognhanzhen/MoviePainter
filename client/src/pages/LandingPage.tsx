@@ -2,60 +2,21 @@ import { MouseEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { AuthPanel, type AuthPanelMode } from "../components/AuthPanel";
+import type { Language } from "../i18n/messages";
+import { useI18n } from "../i18n/useI18n";
 
 const defaultWorkspacePath = "/workspace?mode=chat";
 
-const portalCards = [
-  {
-    cta: "Open Vault",
-    description: "Browse curated poster references, visual systems, and cinematic compositions.",
-    href: "/library",
-    title: "Movie Poster Library"
-  },
-  {
-    cta: "Enter Lab",
-    description: "Start from a line of dialogue, a reference frame, or a full poster direction.",
-    href: defaultWorkspacePath,
-    title: "Generation Workspace"
-  },
-  {
-    cta: "Browse Assets",
-    description: "Collect textures, grain overlays, poster presets, and reusable creative fragments.",
-    href: "/history",
-    title: "Assets"
-  }
-];
-
-const accountCards = [
-  {
-    description: "Keep your creator profile, credit status, and production identity ready.",
-    icon: "P",
-    title: "Profile Details"
-  },
-  {
-    description: "Track monthly render tokens and production priority across poster runs.",
-    icon: "G",
-    title: "Generation Credits"
-  },
-  {
-    description: "Review session access, protected routes, and account security defaults.",
-    icon: "S",
-    title: "Security"
-  },
-  {
-    description: "Prepare billing records and subscription tiers for studio-scale work.",
-    icon: "B",
-    title: "Billing"
-  }
-];
-
 export function LandingPage() {
   const { status } = useAuth();
+  const { language } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const primaryCtaHref = status === "authenticated" ? defaultWorkspacePath : "/";
   const [authPanel, setAuthPanel] = useState<{ mode: AuthPanelMode; redirectPath: string } | null>(null);
+  const portalCards = getPortalCards(language);
+  const accountCards = getAccountCards(language);
 
   function handleProtectedLink(event: MouseEvent<HTMLAnchorElement>, redirectPath: string, mode: AuthPanelMode = "login") {
     if (status !== "guest") {
@@ -189,16 +150,16 @@ export function LandingPage() {
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] text-white">
+      <div className="flex min-h-dvh items-center justify-center bg-[#0a0a0a] text-white">
         <div className="rounded-lg border border-white/10 bg-white/6 px-8 py-6 shadow-[0_30px_120px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-          Entering MoviePainter...
+          {landingCopy(language, "Entering MoviePainter...", "正在进入 MoviePainter...")}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#1a1a1a_0%,#0a0a0a_48%,#050505_100%)] text-white selection:bg-white/20 selection:text-white">
+    <div className="relative min-h-dvh overflow-x-hidden bg-[linear-gradient(180deg,#1a1a1a_0%,#0a0a0a_48%,#050505_100%)] text-white selection:bg-white/20 selection:text-white">
       <div className="pointer-events-none fixed inset-0 z-0 opacity-[0.035] [background-image:radial-gradient(circle_at_12%_24%,rgba(255,255,255,0.8)_0_0.5px,transparent_0.7px),radial-gradient(circle_at_72%_64%,rgba(255,255,255,0.52)_0_0.5px,transparent_0.7px)] [background-size:3px_3px,4px_4px]" />
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         <div className="absolute -top-28 right-[-12%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(255,215,150,0.12)_0%,transparent_62%)] blur-[80px]" />
@@ -224,7 +185,7 @@ export function LandingPage() {
                 onClick={(event) => handleProtectedLink(event, portal.href)}
                 className="relative text-sm font-semibold text-neutral-500 transition hover:text-neutral-100"
               >
-                {portal.title === "Movie Poster Library" ? "Library" : portal.title === "Generation Workspace" ? "Workspace" : "Assets"}
+                {portal.navLabel}
               </Link>
             ))}
           </nav>
@@ -235,12 +196,12 @@ export function LandingPage() {
               onClick={(event) => handleProtectedLink(event, "/settings")}
               className="hidden rounded-lg border border-white/10 px-3 py-2 text-xs font-bold tracking-[0.18em] text-neutral-500 uppercase transition hover:border-white/22 hover:text-neutral-100 sm:inline-flex"
             >
-              Account
+              {landingCopy(language, "Account", "账户")}
             </Link>
             <Link
               to={status === "authenticated" ? "/settings" : "/"}
               onClick={(event) => handleProtectedLink(event, "/settings")}
-              aria-label="Open account"
+              aria-label={landingCopy(language, "Open account", "打开账户")}
               className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/6 text-sm font-bold tracking-[0.12em] text-neutral-100 uppercase shadow-[0_16px_34px_rgba(0,0,0,0.28)] transition hover:border-white/20 hover:bg-white/10"
             >
               MP
@@ -249,15 +210,21 @@ export function LandingPage() {
         </div>
       </header>
 
-      <header className="relative z-10 flex min-h-[88vh] items-center justify-center overflow-hidden px-4 pt-24 text-center">
+      <header className="relative z-10 flex min-h-[88dvh] items-center justify-center overflow-hidden px-4 pt-24 text-center">
         <div className="mx-auto max-w-5xl">
           <h1 className="font-[var(--font-display)] text-5xl leading-[0.98] font-bold tracking-[-0.07em] text-white sm:text-7xl lg:text-8xl">
-            Paint Your Vision
+            {landingCopy(language, "Paint Your Vision", "绘制你的构想")}
             <br />
-            <span className="text-white/92 [text-shadow:0_0_26px_rgba(255,255,255,0.34)]">into the Frame</span>
+            <span className="text-white/92 [text-shadow:0_0_26px_rgba(255,255,255,0.34)]">
+              {landingCopy(language, "into the Frame", "成为电影画面")}
+            </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-white/68 sm:text-xl">
-            From storyboard to poster art, curate the cinematic language of your next production.
+            {landingCopy(
+              language,
+              "From storyboard to poster art, curate the cinematic language of your next production.",
+              "从故事板到海报视觉，组织下一部作品的电影语言。"
+            )}
           </p>
           <div className="mt-10 flex items-center justify-center">
             <Link
@@ -265,7 +232,7 @@ export function LandingPage() {
               onClick={(event) => handleProtectedLink(event, defaultWorkspacePath)}
               className="inline-flex h-12 min-w-[11rem] items-center justify-center rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 font-[var(--font-ui)] text-sm font-extrabold text-white shadow-[0_10px_30px_rgba(229,9,20,0.28)] transition hover:scale-[1.02] active:scale-95"
             >
-              Start Creating
+              {landingCopy(language, "Start Creating", "开始创作")}
             </Link>
           </div>
         </div>
@@ -276,10 +243,10 @@ export function LandingPage() {
           <div className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
               <span className="mb-2 block font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-white/58 uppercase">
-                Navigation
+                {landingCopy(language, "Navigation", "导航")}
               </span>
               <h2 className="font-[var(--font-display)] text-4xl leading-tight font-bold tracking-[-0.045em] text-white md:text-5xl">
-                Access Portals
+                {landingCopy(language, "Access Portals", "进入创作入口")}
               </h2>
             </div>
             <div className="hidden h-px flex-1 bg-white/10 md:block" />
@@ -317,10 +284,14 @@ export function LandingPage() {
           <div className="relative z-10 mx-auto mb-28 grid max-w-7xl grid-cols-1 gap-12 px-6 lg:grid-cols-12 lg:gap-16">
             <div className="lg:col-span-4">
               <h2 className="font-[var(--font-display)] text-3xl font-bold tracking-[-0.035em] text-white">
-                Account & Curation
+                {landingCopy(language, "Account & Curation", "账户与策展")}
               </h2>
               <p className="mt-5 leading-7 text-white/60">
-                Manage your creative profile, production credits, and personalized curation settings.
+                {landingCopy(
+                  language,
+                  "Manage your creative profile, production credits, and personalized curation settings.",
+                  "管理创作者资料、生成额度和个性化策展设置。"
+                )}
               </p>
               <Link
                 to={status === "authenticated" ? "/settings" : "/"}
@@ -330,7 +301,7 @@ export function LandingPage() {
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
                   <img
                     src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80"
-                    alt="Creator profile"
+                    alt={landingCopy(language, "Creator profile", "创作者头像")}
                     className="h-full w-full object-cover"
                     loading="lazy"
                   />
@@ -338,7 +309,7 @@ export function LandingPage() {
                 <div>
                   <h3 className="font-bold text-white">{status === "authenticated" ? "MoviePainter User" : "Julian Voss"}</h3>
                   <span className="font-[var(--font-display)] text-xs font-bold tracking-[0.18em] text-white/50 uppercase">
-                    Director Tier
+                    {landingCopy(language, "Director Tier", "导演级账户")}
                   </span>
                 </div>
               </Link>
@@ -366,24 +337,33 @@ export function LandingPage() {
             <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
               <div className="text-center md:text-left">
                 <span className="font-[var(--font-display)] text-lg font-black tracking-[0.16em] text-white">MoviePainter</span>
-                <p className="mt-2 text-sm tracking-wide text-white/40">© 2024 MoviePainter. The Digital Curator.</p>
+                <p className="mt-2 text-sm tracking-wide text-white/40">
+                  {landingCopy(language, "© 2024 MoviePainter. The Digital Curator.", "© 2024 MoviePainter. 数字策展工作室。")}
+                </p>
               </div>
               <div className="flex gap-8 text-sm tracking-wide">
-                {["Privacy", "Terms", "Contact"].map((item) => (
-                  <a key={item} href="#" className="text-white/40 transition hover:text-white">
-                    {item}
+                {[
+                  { label: landingCopy(language, "Privacy", "隐私"), value: "privacy" },
+                  { label: landingCopy(language, "Terms", "条款"), value: "terms" },
+                  { label: landingCopy(language, "Contact", "联系"), value: "contact" }
+                ].map((item) => (
+                  <a key={item.value} href="#" className="text-white/40 transition hover:text-white">
+                    {item.label}
                   </a>
                 ))}
               </div>
               <div className="flex gap-3">
-                {["Share", "World"].map((item) => (
+                {[
+                  { label: landingCopy(language, "Share", "分享"), value: "share" },
+                  { label: landingCopy(language, "World", "世界"), value: "world" }
+                ].map((item) => (
                   <a
-                    key={item}
+                    key={item.value}
                     href="#"
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white"
-                    aria-label={item}
+                    aria-label={item.label}
                   >
-                    {item[0]}
+                    {item.label[0]}
                   </a>
                 ))}
               </div>
@@ -404,6 +384,73 @@ export function LandingPage() {
   );
 }
 
+function landingCopy(language: Language, english: string, chinese: string) {
+  return language === "zh-CN" ? chinese : english;
+}
+
+function getPortalCards(language: Language) {
+  return [
+    {
+      cta: landingCopy(language, "Open Vault", "打开片库"),
+      description: landingCopy(
+        language,
+        "Browse curated poster references, visual systems, and cinematic compositions.",
+        "浏览精选海报参考、视觉系统和电影构图。"
+      ),
+      href: "/library",
+      navLabel: landingCopy(language, "Library", "片库"),
+      title: landingCopy(language, "Movie Poster Library", "电影海报片库")
+    },
+    {
+      cta: landingCopy(language, "Enter Lab", "进入工作台"),
+      description: landingCopy(
+        language,
+        "Start from a line of dialogue, a reference frame, or a full poster direction.",
+        "从一句对白、一帧参考画面或完整海报方向开始。"
+      ),
+      href: defaultWorkspacePath,
+      navLabel: landingCopy(language, "Workspace", "工作台"),
+      title: landingCopy(language, "Generation Workspace", "生成工作台")
+    },
+    {
+      cta: landingCopy(language, "Browse Assets", "浏览资产"),
+      description: landingCopy(
+        language,
+        "Collect textures, grain overlays, poster presets, and reusable creative fragments.",
+        "收集纹理、颗粒叠层、海报预设和可复用创意片段。"
+      ),
+      href: "/history",
+      navLabel: landingCopy(language, "Assets", "资产"),
+      title: landingCopy(language, "Assets", "资产")
+    }
+  ];
+}
+
+function getAccountCards(language: Language) {
+  return [
+    {
+      description: landingCopy(language, "Keep your creator profile, credit status, and production identity ready.", "维护创作者资料、额度状态和制作身份。"),
+      icon: "P",
+      title: landingCopy(language, "Profile Details", "资料详情")
+    },
+    {
+      description: landingCopy(language, "Track monthly render tokens and production priority across poster runs.", "追踪每月渲染额度和海报任务优先级。"),
+      icon: "G",
+      title: landingCopy(language, "Generation Credits", "生成额度")
+    },
+    {
+      description: landingCopy(language, "Review session access, protected routes, and account security defaults.", "查看会话访问、受保护页面和账户安全默认项。"),
+      icon: "S",
+      title: landingCopy(language, "Security", "安全")
+    },
+    {
+      description: landingCopy(language, "Prepare billing records and subscription tiers for studio-scale work.", "为工作室级创作准备账单记录和订阅层级。"),
+      icon: "B",
+      title: landingCopy(language, "Billing", "账单")
+    }
+  ];
+}
+
 function LandingAuthModal({
   mode,
   onClose,
@@ -416,7 +463,7 @@ function LandingAuthModal({
   redirectPath: string;
 }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#0b0c0c]/78 px-4 py-4 backdrop-blur-[18px] md:py-20">
+    <div className="fixed inset-0 z-[90] flex touch-pan-y items-start justify-center overflow-y-auto bg-[#0b0c0c]/78 px-3 py-3 overscroll-contain backdrop-blur-[18px] [-webkit-overflow-scrolling:touch] sm:px-4 sm:py-6 md:items-center md:py-20">
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(32,31,31,0.88)_0%,rgba(10,10,10,0.96)_68%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(255,180,170,0.08),transparent_28%,rgba(229,9,20,0.08)_70%,transparent)]" />

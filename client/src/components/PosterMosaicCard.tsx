@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { PosterRecord } from "../data/posters";
+import { useI18n } from "../i18n/useI18n";
+import { getPosterDisplay } from "../lib/poster-localization";
 
 const layoutClassMap: Record<PosterRecord["layout"], string> = {
   featured: "aspect-[3/4]",
@@ -25,7 +27,10 @@ export function PosterMosaicCard({
   selected = false,
   showMeta = true
 }: PosterMosaicCardProps) {
+  const { language } = useI18n();
   const [imgFailed, setImgFailed] = useState(false);
+  const display = getPosterDisplay(poster, language);
+  const selectPosterLabel = language === "zh-CN" ? `选择海报 ${display.title}` : `Select poster ${display.title}`;
 
   return (
     <article
@@ -41,18 +46,18 @@ export function PosterMosaicCard({
         aria-pressed={selected}
         className="absolute inset-0 z-10 cursor-pointer"
       >
-        <span className="sr-only">选择海报 {poster.title}</span>
+        <span className="sr-only">{selectPosterLabel}</span>
       </button>
       {imgFailed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#2a1a2e] via-[#1a1a2e] to-[#0d1117] p-4 text-center">
           <span className="text-3xl">🎬</span>
-          <p className="mt-3 font-[var(--font-display)] text-sm font-bold leading-tight text-white/80">{poster.title}</p>
-          <p className="mt-1 text-[10px] tracking-widest text-[#ffb4aa]/60 uppercase">{poster.genre}</p>
+          <p className="mt-3 font-[var(--font-display)] text-sm font-bold leading-tight text-white/80">{display.title}</p>
+          <p className="mt-1 text-[10px] tracking-widest text-[#ffb4aa]/60 uppercase">{display.genre}</p>
         </div>
       ) : (
         <img
           src={poster.imageUrl}
-          alt={poster.title}
+          alt={display.title}
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
           onError={() => setImgFailed(true)}
@@ -63,16 +68,16 @@ export function PosterMosaicCard({
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/18 to-transparent" />
           <div className="relative z-20 flex h-full flex-col justify-end p-5 text-white">
             <p className="text-[11px] tracking-[0.28em] text-[#ffb4aa] uppercase">
-              {poster.genre} / {poster.year}
+              {display.genre} / {poster.year}
             </p>
-            <h3 className="mt-2 text-xl leading-tight font-semibold">{poster.title}</h3>
-            <p className="mt-2 max-w-md text-sm leading-6 text-slate-100/88">{poster.summary}</p>
+            <h3 className="mt-2 text-xl leading-tight font-semibold">{display.title}</h3>
+            <p className="mt-2 max-w-md text-sm leading-6 text-slate-100/88">{display.summary}</p>
           </div>
         </>
       ) : (
         <div className="pointer-events-none absolute inset-0 z-20 flex translate-y-2 flex-col justify-end bg-gradient-to-t from-black/84 via-black/8 to-transparent p-4 opacity-0 transition duration-500 group-hover:translate-y-0 group-hover:opacity-100">
-          <p className="text-[10px] font-bold tracking-[0.24em] text-[#ffb4aa] uppercase">{poster.genre}</p>
-          <h3 className="mt-1 font-[var(--font-display)] text-base leading-tight font-semibold text-white">{poster.title}</h3>
+          <p className="text-[10px] font-bold tracking-[0.24em] text-[#ffb4aa] uppercase">{display.genre}</p>
+          <h3 className="mt-1 font-[var(--font-display)] text-base leading-tight font-semibold text-white">{display.title}</h3>
         </div>
       )}
 

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/useAuth";
 import type { HistoryOutputRecord, HistoryRecord, HistoryRecordDetail, WorkspaceGeneratedResult } from "../data/posters";
+import type { Language } from "../i18n/messages";
+import { useI18n } from "../i18n/useI18n";
 import { appDataRequest } from "../lib/api";
 import { getCachedHistoryRecord, getCachedHistoryRecords, saveHistoryRecordsSnapshot } from "../lib/history-cache";
 
 export function HistoryPage() {
   const { status, token } = useAuth();
+  const { language } = useI18n();
   // Instantly seed from localStorage — zero loading delay
   const [records, setRecords] = useState<HistoryRecord[]>(() => filterGeneratedHistoryRecords(getCachedHistoryRecords()));
   const [loading, setLoading] = useState(records.length === 0); // only show loading skeleton when truly empty
@@ -60,7 +63,7 @@ export function HistoryPage() {
         if (!cancelled) {
           // On network error, keep showing cached data silently
           if (records.length === 0) {
-            setError(err instanceof Error ? err.message : "获取历史记录失败");
+            setError(err instanceof Error ? err.message : historyCopy(language, "Failed to load history records.", "获取历史记录失败"));
           }
         }
       } finally {
@@ -92,16 +95,22 @@ export function HistoryPage() {
     if (cachedDetail) {
       setActiveHistoryDetail(cachedDetail);
       setActiveHistoryLoading(false);
-      setActiveHistoryMessage("显示缓存");
+      setActiveHistoryMessage(historyCopy(language, "Showing cache", "显示缓存"));
     } else {
       setActiveHistoryDetail(null);
       setActiveHistoryLoading(true);
-      setActiveHistoryMessage("加载中");
+      setActiveHistoryMessage(historyCopy(language, "Loading", "加载中"));
     }
 
     if (!token) {
       setActiveHistoryLoading(false);
-      setActiveHistoryMessage(cachedDetail ? (status === "authenticated" ? "显示缓存" : "演示数据") : "未找到记录");
+      setActiveHistoryMessage(
+        cachedDetail
+          ? status === "authenticated"
+            ? historyCopy(language, "Showing cache", "显示缓存")
+            : historyCopy(language, "Demo data", "演示数据")
+          : historyCopy(language, "Record not found", "未找到记录")
+      );
       return;
     }
 
@@ -113,7 +122,7 @@ export function HistoryPage() {
       }
 
       setActiveHistoryDetail(response.record);
-      setActiveHistoryMessage(`已同步 ${response.source}`);
+      setActiveHistoryMessage(historyCopy(language, `Synced from ${response.source}`, `已同步 ${response.source}`));
     } catch (err) {
       const fallbackDetail = buildFallbackRecordDetail(historyId, getCachedHistoryRecord(historyId), records);
 
@@ -125,7 +134,9 @@ export function HistoryPage() {
         setActiveHistoryDetail(fallbackDetail);
       }
 
-      setActiveHistoryMessage(fallbackDetail ? "显示缓存" : err instanceof Error ? err.message : "未找到记录");
+      setActiveHistoryMessage(
+        fallbackDetail ? historyCopy(language, "Showing cache", "显示缓存") : err instanceof Error ? err.message : historyCopy(language, "Record not found", "未找到记录")
+      );
     } finally {
       if (detailRequestRef.current === requestId) {
         setActiveHistoryLoading(false);
@@ -160,18 +171,18 @@ export function HistoryPage() {
         </div>
       ) : error ? (
         <div className="rounded-2xl border border-rose-900/50 bg-rose-950/30 p-8 shadow-sm">
-          <p className="text-sm font-semibold text-rose-200">历史记录加载失败</p>
+          <p className="text-sm font-semibold text-rose-200">{historyCopy(language, "History failed to load", "历史记录加载失败")}</p>
           <p className="mt-2 text-sm text-rose-400">{error}</p>
           <button
             onClick={() => window.location.reload()}
             className="mt-4 rounded-xl bg-rose-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800"
           >
-            重试
+            {historyCopy(language, "Retry", "重试")}
           </button>
         </div>
       ) : records.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/12 bg-white/5 p-12 text-center text-neutral-400">
-          <p className="text-sm">暂无生成记录，去工作区开始创作吧。</p>
+          <p className="text-sm">{historyCopy(language, "No generations yet. Head to the workspace to start creating.", "暂无生成记录，去工作区开始创作吧。")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
@@ -231,7 +242,8 @@ function HistoryInspectPanel({
   onClose: () => void;
   record: HistoryRecordDetail | null;
 }) {
-  const displayResults = buildHistoryDisplayResults(record);
+  const { language } = useI18n();
+  const displayResults = buildHistoryDisplayResults(record, language);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
@@ -250,7 +262,7 @@ function HistoryInspectPanel({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#0b0c0c]/78 px-4 py-20 backdrop-blur-[18px]">
+    <div className="fixed inset-0 z-[90] flex touch-pan-y items-start justify-center overflow-y-auto bg-[#0b0c0c]/78 px-2 py-3 overscroll-contain backdrop-blur-[18px] [-webkit-overflow-scrolling:touch] sm:px-4 sm:py-6 xl:items-center xl:py-20">
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(32,31,31,0.88)_0%,rgba(10,10,10,0.96)_68%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(255,180,170,0.08),transparent_28%,rgba(229,9,20,0.08)_70%,transparent)]" />
@@ -258,10 +270,10 @@ function HistoryInspectPanel({
 
       <div className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:4px_4px]" />
 
-      <div className="relative z-10 flex h-full max-h-[calc(100vh-10rem)] w-full max-w-6xl items-center justify-center">
-        <div className="relative flex h-[min(78vh,760px)] w-full flex-col overflow-visible">
-          <div className="absolute top-0 left-[calc(100%+0.75rem)] z-[110] flex shrink-0 flex-col items-center gap-2 rounded-xl bg-[#1c1b1b]/82 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.56)] backdrop-blur-2xl">
-            <HistoryPanelIconButton label="关闭历史查看面板" onClick={onClose}>
+      <div className="relative z-10 flex min-h-[calc(100dvh-1.5rem)] w-full max-w-6xl items-center justify-center xl:min-h-0 xl:max-h-[calc(100dvh-6rem)]">
+        <div className="relative flex h-[calc(100dvh-1.5rem)] w-full flex-col overflow-visible xl:h-[min(78dvh,760px)]">
+          <div className="absolute top-2 right-2 z-[110] flex shrink-0 flex-col items-center gap-2 rounded-xl bg-[#1c1b1b]/82 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.56)] backdrop-blur-2xl xl:top-0 xl:right-auto xl:left-[calc(100%+0.75rem)]">
+            <HistoryPanelIconButton label={historyCopy(language, "Close history viewer", "关闭历史查看面板")} onClick={onClose}>
               ×
             </HistoryPanelIconButton>
 
@@ -269,13 +281,13 @@ function HistoryInspectPanel({
               <>
                 <HistoryTaskButton
                   disabled={!canViewOlder}
-                  label="上一条历史记录"
+                  label={historyCopy(language, "Previous history record", "上一条历史记录")}
                   symbol="↑"
                   onClick={() => onBrowseHistory("older")}
                 />
                 <HistoryTaskButton
                   disabled={!canViewNewer}
-                  label="下一条历史记录"
+                  label={historyCopy(language, "Next history record", "下一条历史记录")}
                   symbol="↓"
                   onClick={() => onBrowseHistory("newer")}
                 />
@@ -283,7 +295,7 @@ function HistoryInspectPanel({
             ) : null}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-[#1c1b1b]/82 shadow-[0_24px_70px_rgba(0,0,0,0.56)] backdrop-blur-2xl">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl bg-[#1c1b1b]/82 shadow-[0_24px_70px_rgba(0,0,0,0.56)] overscroll-contain backdrop-blur-2xl [-webkit-overflow-scrolling:touch] xl:overflow-hidden">
             <div className="relative flex min-h-0 flex-1 flex-col p-4 md:p-6">
               <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 pt-12 xl:grid-cols-[minmax(0,1.16fr)_minmax(18rem,0.84fr)] xl:pt-0">
                 <div className="grid min-h-0 grid-cols-1 gap-1.5 xl:grid-cols-[minmax(16rem,1fr)_10.75rem]">
@@ -325,6 +337,7 @@ function HistoryPreviewSurface({
   loading: boolean;
   record: HistoryRecordDetail | null;
 }) {
+  const { language } = useI18n();
   const mainResult = displayResults[activeImageIndex] ?? displayResults[0] ?? null;
 
   return (
@@ -334,7 +347,7 @@ function HistoryPreviewSurface({
       ) : (
         <HistoryThumbnailPlaceholder
           index={activeImageIndex}
-          message={loading ? "加载历史记录" : record ? "暂无图片" : "未找到历史记录"}
+          message={loading ? historyCopy(language, "Loading history", "加载历史记录") : record ? historyCopy(language, "No image yet", "暂无图片") : historyCopy(language, "History record not found", "未找到历史记录")}
           variant="main"
         />
       )}
@@ -353,6 +366,7 @@ function HistorySecondaryStack({
   loading: boolean;
   onSelectImage: (imageIndex: number) => void;
 }) {
+  const { language } = useI18n();
   const secondarySlots = Array.from({ length: 4 }, (_, imageIndex) => ({
     imageIndex,
     result: displayResults[imageIndex] ?? null
@@ -376,7 +390,7 @@ function HistorySecondaryStack({
           <HistoryThumbnailPlaceholder
             index={imageIndex}
             key={`empty-${imageIndex}`}
-            message={loading ? "加载中" : "暂无图片"}
+            message={loading ? historyCopy(language, "Loading", "加载中") : historyCopy(language, "No image yet", "暂无图片")}
             variant="secondary"
           />
         )
@@ -398,6 +412,7 @@ function HistoryVariationTile({
   result: WorkspaceGeneratedResult;
   variant?: "main" | "secondary";
 }) {
+  const { language } = useI18n();
   const sizeClassName =
     variant === "main"
       ? "mx-auto h-full max-h-full w-auto max-w-full max-xl:h-auto max-xl:w-full"
@@ -417,16 +432,16 @@ function HistoryVariationTile({
       }}
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      aria-label={onSelect ? `切换到第 ${index + 1} 张生成图` : undefined}
+      aria-label={onSelect ? historyCopy(language, `Switch to generated image ${index + 1}`, `切换到第 ${index + 1} 张生成图`) : undefined}
       className={`group relative aspect-[3/4] min-h-0 overflow-hidden rounded-[0.95rem] border border-white/6 bg-white/5 text-left ${sizeClassName} ${interactiveClassName} ${
         active ? "" : "opacity-60 grayscale transition hover:opacity-100 hover:grayscale-0"
       }`}
     >
-      <img src={result.imageUrl} alt={result.title || "生成图"} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+      <img src={result.imageUrl} alt={result.title || historyCopy(language, "Generated image", "生成图")} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
       <div className="absolute top-2 left-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
         {formatGenerationImageIndex(index)}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/70 via-black/28 to-transparent px-3 pt-10 pb-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/70 via-black/28 to-transparent px-3 pt-10 pb-3 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
         <a
           href={result.imageUrl}
           target="_blank"
@@ -435,7 +450,7 @@ function HistoryVariationTile({
           onClick={(event) => event.stopPropagation()}
           className="pointer-events-auto rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-9 py-3.5 font-[var(--font-ui)] text-base font-extrabold text-white shadow-[0_10px_30px_rgba(229,9,20,0.28)] transition hover:scale-[1.02] active:scale-95"
         >
-          Download
+          {historyCopy(language, "Download", "下载")}
         </a>
       </div>
     </article>
@@ -478,20 +493,24 @@ function HistoryTaskSidebar({
   message: string;
   record: HistoryRecordDetail | null;
 }) {
+  const { language } = useI18n();
+
   return (
     <aside className="px-1 py-2 text-neutral-100">
       <div className="space-y-4">
         <div>
-          <p className="text-[10px] font-extrabold tracking-[0.24em] text-white/38 uppercase">Prompt</p>
+          <p className="text-[10px] font-extrabold tracking-[0.24em] text-white/38 uppercase">
+            {historyCopy(language, "Prompt", "提示词")}
+          </p>
           <p className="mt-2 max-h-28 overflow-y-auto pr-1 text-sm leading-6 text-white/80 italic">
-            {record?.prompt.trim() || (loading ? "Loading history detail." : "Describe the movie poster you want to create.")}
+            {record?.prompt.trim() || (loading ? historyCopy(language, "Loading history detail.", "正在加载历史详情。") : historyCopy(language, "Describe the movie poster you want to create.", "描述你想生成的电影海报。"))}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm leading-6 font-semibold text-white/82">
           <span>{record ? formatGenerationMode(record.mode) : "AI Chat"}</span>
-          <span>{record ? `${record.outputs} Output` : "0 Output"}</span>
-          <span>{record ? formatGeneratedAt(record.createdAt) : "History"}</span>
+          <span>{record ? formatOutputCount(record.outputs, language) : formatOutputCount(0, language)}</span>
+          <span>{record ? formatGeneratedAt(record.createdAt, language) : historyCopy(language, "History", "历史")}</span>
         </div>
 
         {message ? (
@@ -563,6 +582,8 @@ function HistoryTaskButton({
 }
 
 function HistoryCard({ record, onClick }: { record: HistoryRecord; onClick: () => void }) {
+  const { language } = useI18n();
+
   return (
     <article
       onClick={onClick}
@@ -574,20 +595,24 @@ function HistoryCard({ record, onClick }: { record: HistoryRecord; onClick: () =
       }}
       role="button"
       tabIndex={0}
-      aria-label={`${formatGenerationMode(record.mode)} 生成记录，${record.outputs} Output，${formatGeneratedAt(record.createdAt)}`}
+      aria-label={historyCopy(
+        language,
+        `${formatGenerationMode(record.mode)} generation record, ${formatOutputCount(record.outputs, language)}, ${formatGeneratedAt(record.createdAt, language)}`,
+        `${formatGenerationMode(record.mode)} 生成记录，${formatOutputCount(record.outputs, language)}，${formatGeneratedAt(record.createdAt, language)}`
+      )}
       className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border border-white/10 bg-[#111211] shadow-sm outline-none transition hover:-translate-y-1 hover:border-[#ffb4aa] hover:shadow-[0_0_0_1px_rgba(229,9,20,0.42),0_18px_42px_rgba(0,0,0,0.32)] focus-visible:border-[#ffb4aa] focus-visible:ring-2 focus-visible:ring-[#ffb4aa]/45"
     >
       <div className="relative aspect-[3/4] bg-[#181918]">
         {record.previewImageUrl ? (
           <img
             src={record.previewImageUrl}
-            alt={record.previewTitle ?? "Thumbnail"}
+            alt={record.previewTitle ?? historyCopy(language, "Thumbnail", "缩略图")}
             className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
             loading="lazy"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-            暂无图片
+            {historyCopy(language, "No image yet", "暂无图片")}
           </div>
         )}
       </div>
@@ -597,9 +622,9 @@ function HistoryCard({ record, onClick }: { record: HistoryRecord; onClick: () =
           {formatGenerationMode(record.mode)}
         </p>
         <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
-          <span className="min-w-0 truncate">{record.outputs} Output</span>
+          <span className="min-w-0 truncate">{formatOutputCount(record.outputs, language)}</span>
           <time className="shrink-0 text-right" dateTime={record.createdAt}>
-            {formatGeneratedAt(record.createdAt)}
+            {formatGeneratedAt(record.createdAt, language)}
           </time>
         </div>
       </div>
@@ -641,7 +666,7 @@ function buildFallbackRecordDetail(
   return buildSummaryRecordDetail(records.find((record) => record.id === historyId) ?? null);
 }
 
-function buildHistoryDisplayResults(record: HistoryRecordDetail | null): WorkspaceGeneratedResult[] {
+function buildHistoryDisplayResults(record: HistoryRecordDetail | null, language: Language): WorkspaceGeneratedResult[] {
   if (!record) {
     return [];
   }
@@ -651,7 +676,7 @@ function buildHistoryDisplayResults(record: HistoryRecordDetail | null): Workspa
       id: output.id,
       imageUrl: output.thumbnailUrl ?? output.imageUrl,
       summary: output.summary ?? "",
-      title: output.title ?? `生成图 ${index + 1}`
+      title: output.title ?? historyCopy(language, `Generated image ${index + 1}`, `生成图 ${index + 1}`)
     }));
   }
 
@@ -661,12 +686,16 @@ function buildHistoryDisplayResults(record: HistoryRecordDetail | null): Workspa
         id: `${record.id}-preview`,
         imageUrl: record.previewImageUrl,
         summary: record.prompt,
-        title: record.previewTitle ?? "生成图"
+        title: record.previewTitle ?? historyCopy(language, "Generated image", "生成图")
       }
     ];
   }
 
   return [];
+}
+
+function formatOutputCount(count: number, language: Language) {
+  return language === "zh-CN" ? `${count} 张` : `${count} ${count === 1 ? "Output" : "Outputs"}`;
 }
 
 function mapCachedResultToOutput(result: WorkspaceGeneratedResult, index: number): HistoryOutputRecord {
@@ -684,16 +713,20 @@ function formatGenerationImageIndex(index: number) {
   return String(index + 1).padStart(2, "0");
 }
 
-function formatGeneratedAt(value: string) {
+function formatGeneratedAt(value: string, language: Language) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(language, {
     year: "numeric",
     month: "numeric",
     day: "numeric"
   }).format(date);
+}
+
+function historyCopy(language: Language, english: string, chinese: string) {
+  return language === "zh-CN" ? chinese : english;
 }

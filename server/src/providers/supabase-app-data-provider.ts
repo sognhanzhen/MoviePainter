@@ -546,7 +546,7 @@ async function ensureUserSettings(supabase: SupabaseClient, user: Extract<Authen
     .from("user_settings")
     .upsert(
       {
-        language: "zh-CN",
+        language: "en-US",
         notification_enabled: true,
         preferred_default_mode: "chat",
         user_id: user.id

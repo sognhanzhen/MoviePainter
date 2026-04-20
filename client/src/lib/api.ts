@@ -263,7 +263,7 @@ export const workspaceRequest = {
           finalResponse = event.data as WorkspaceGenerationResponse;
         } else if (event.event === "error") {
           const payload = event.data as ApiError;
-          streamError = new Error(payload.message ?? "AI 图片生成失败");
+          streamError = new Error(payload.message ?? "AI image generation failed");
         }
       }
 
@@ -277,7 +277,7 @@ export const workspaceRequest = {
     }
 
     if (!finalResponse) {
-      throw new Error("生图响应没有返回结果");
+      throw new Error("The image generation response did not include any results");
     }
 
     return finalResponse;

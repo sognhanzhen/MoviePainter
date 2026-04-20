@@ -5,8 +5,8 @@ import type { AppDataProvider } from "../providers/app-data-provider.js";
 import { getAuthUser } from "../middleware/auth.js";
 
 const settingsSchema = z.object({
-  displayName: z.string().min(2, "展示名称至少 2 个字符"),
-  language: z.string().min(2, "语言字段不合法"),
+  displayName: z.string().min(2, "Display name must be at least 2 characters."),
+  language: z.enum(["en-US", "zh-CN"]),
   notificationEnabled: z.boolean(),
   preferredDefaultMode: z.enum(["chat", "draw"])
 });

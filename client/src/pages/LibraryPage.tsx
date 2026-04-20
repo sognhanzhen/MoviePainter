@@ -5,27 +5,25 @@ import { PosterDetailModal } from "../components/PosterDetailModal";
 import { PosterMosaicCard } from "../components/PosterMosaicCard";
 import type { PosterRecord, WorkspaceMode } from "../data/posters";
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
+import type { Language } from "../i18n/messages";
+import { useI18n } from "../i18n/useI18n";
 import { appDataRequest } from "../lib/api";
+import {
+  formatDirectorValue,
+  formatPosterAttributeValue,
+  getPosterAttributeFilterValues,
+  getPosterGenreFilterValues
+} from "../lib/poster-localization";
 import { recordWorkspaceAssetUse } from "../lib/workspace-assets";
 
-const genreLabelMap: Record<string, string> = {
-  公路: "Road",
-  动作: "Action",
-  剧情: "Drama",
-  喜剧: "Comedy",
-  奇幻: "Fantasy",
-  悬疑: "Noir",
-  爱情: "Romance"
-};
-
 const filterLabels = {
-  composition: "构图",
-  director: "导演",
-  era: "年代",
-  mood: "氛围",
-  style: "风格",
-  tone: "色调",
-  type: "类型"
+  composition: { "en-US": "Composition", "zh-CN": "构图" },
+  director: { "en-US": "Director", "zh-CN": "导演" },
+  era: { "en-US": "Year", "zh-CN": "年代" },
+  mood: { "en-US": "Mood", "zh-CN": "氛围" },
+  style: { "en-US": "Style", "zh-CN": "风格" },
+  tone: { "en-US": "Tone", "zh-CN": "色调" },
+  type: { "en-US": "Genre", "zh-CN": "类型" }
 } as const;
 
 type FilterKey = keyof typeof filterLabels;
@@ -56,6 +54,7 @@ const defaultFilters: ActiveFilters = {
 
 export function LibraryPage() {
   const { token } = useAuth();
+  const { language } = useI18n();
   const navigate = useNavigate();
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(defaultFilters);
   const [openFilter, setOpenFilter] = useState<FilterKey | null>(null);
@@ -93,10 +92,10 @@ export function LibraryPage() {
           const mapped: PosterRecord[] = response.movies.map((m: any) => ({
              id: `tmdb-${m.tmdbId}`,
              title: m.title || "Unknown",
-             summary: m.overview || "No description available.",
+             summary: m.overview || libraryCopy(language, "No description available.", "暂无简介。"),
              genre: m.genre || "Drama",
              year: m.year || new Date().getFullYear().toString(),
-             director: m.director || "Unknown",
+             director: m.director || libraryCopy(language, "Unknown", "未知"),
              imageUrl: m.posterUrl || "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80",
              region: "tmdb",
              layout: "tall",
@@ -135,7 +134,7 @@ export function LibraryPage() {
       void loadTmdbPage();
     }
     return () => { cancelled = true; };
-  }, [tmdbPage, token]);
+  }, [language, tmdbPage, token]);
 
   const allPosters = useMemo(() => [...posters, ...tmdbPosters], [posters, tmdbPosters]);
 
@@ -166,8 +165,8 @@ export function LibraryPage() {
   }, [openFilter]);
 
   const filterDefinitions = useMemo(() => {
-    return buildFilterDefinitions(allPosters);
-  }, [allPosters]);
+    return buildFilterDefinitions(allPosters, language);
+  }, [allPosters, language]);
 
   const visiblePosters = useMemo(() => {
     return allPosters.filter((poster) => {
@@ -292,8 +291,12 @@ export function LibraryPage() {
         </section>
       ) : (
         <section className="rounded-lg border border-white/8 bg-white/5 px-6 py-12 text-center">
-          <p className="text-sm font-semibold tracking-[0.18em] text-[#ffb4aa] uppercase">No posters found</p>
-          <p className="mt-3 text-sm text-neutral-500">Try a different genre, year, or search term.</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-[#ffb4aa] uppercase">
+            {libraryCopy(language, "No posters found", "未找到海报")}
+          </p>
+          <p className="mt-3 text-sm text-neutral-500">
+            {libraryCopy(language, "Try a different genre, year, or search term.", "请尝试切换类型、年代或关键词。")}
+          </p>
         </section>
       )}
 
@@ -310,10 +313,12 @@ export function LibraryPage() {
             onClick={() => setTmdbPage(prev => prev + 1)}
             className="cursor-pointer rounded-lg bg-gradient-to-r from-[#ffb4aa] to-[#e50914] px-8 py-4 font-[var(--font-display)] text-sm font-bold tracking-[0.2em] text-[#410001] uppercase shadow-lg shadow-[#e50914]/20 transition hover:scale-105 active:scale-95"
           >
-            Discover More Work
+            {libraryCopy(language, "Discover More Work", "发现更多作品")}
           </button>
         ) : (
-          <p className="text-sm font-bold tracking-[0.1em] text-neutral-500 uppercase">You've reached the end</p>
+          <p className="text-sm font-bold tracking-[0.1em] text-neutral-500 uppercase">
+            {libraryCopy(language, "You've reached the end", "已经到底了")}
+          </p>
         )}
       </div>
 
@@ -321,13 +326,17 @@ export function LibraryPage() {
         <div className="text-center md:text-left">
           <p className="font-[var(--font-display)] text-lg font-black text-[#e5e2e1]">MoviePainter</p>
           <p className="mt-2 text-[10px] tracking-[0.24em] text-neutral-600 uppercase">
-            © 2024 MoviePainter. The Digital Curator.
+            {libraryCopy(language, "© 2024 MoviePainter. The Digital Curator.", "© 2024 MoviePainter. 数字策展工作室。")}
           </p>
         </div>
         <nav className="flex gap-10 text-[10px] tracking-[0.24em] uppercase">
-          {["Privacy", "Terms", "Support"].map((item) => (
-            <a key={item} href="#" className="text-neutral-600 transition hover:text-[#e5e2e1]">
-              {item}
+          {[
+            { label: libraryCopy(language, "Privacy", "隐私"), value: "privacy" },
+            { label: libraryCopy(language, "Terms", "条款"), value: "terms" },
+            { label: libraryCopy(language, "Support", "支持"), value: "support" }
+          ].map((item) => (
+            <a key={item.value} href="#" className="text-neutral-600 transition hover:text-[#e5e2e1]">
+              {item.label}
             </a>
           ))}
         </nav>
@@ -426,105 +435,106 @@ function LibraryFilterOption({
   );
 }
 
-function formatGenreLabel(genre: string) {
-  return genreLabelMap[genre] ?? genre;
-}
-
-function buildFilterDefinitions(posters: PosterRecord[]): FilterDefinition[] {
-  const genres = uniqueOptions(posters.map((poster) => formatGenreLabel(poster.genre)));
+export function buildFilterDefinitions(posters: PosterRecord[], language: Language): FilterDefinition[] {
+  const genres = uniqueOptions(posters.flatMap((poster) => getPosterGenreFilterValues(poster)));
   const years = uniqueOptions(posters.map((poster) => poster.year).sort((a, b) => Number(b) - Number(a)));
   const directors = uniqueOptions(posters.map((poster) => poster.director ?? "").filter(Boolean));
 
   return [
     {
       key: "director",
-      label: filterLabels.director,
+      label: filterLabels.director[language],
       options: [
-        { label: "全部导演", value: "all", description: "浏览完整导演视觉谱系。" },
+        { label: libraryCopy(language, "All Directors", "全部导演"), value: "all", description: libraryCopy(language, "Browse the full director visual spectrum.", "浏览完整导演视觉谱系。") },
         ...directors.map((director) => ({
-          label: director,
+          label: formatDirectorValue(director, language),
           value: director,
-          description: "按导演气质筛选海报。"
+          description: libraryCopy(language, "Filter posters by director sensibility.", "按导演气质筛选海报。")
         }))
       ]
     },
     {
       key: "type",
-      label: filterLabels.type,
+      label: filterLabels.type[language],
       options: [
-        { label: "全部类型", value: "all", description: "保留所有电影类型。" },
+        { label: libraryCopy(language, "All Genres", "全部类型"), value: "all", description: libraryCopy(language, "Keep every movie genre visible.", "保留所有电影类型。") },
         ...genres.map((genre) => ({
-          label: genre,
+          label: formatPosterAttributeValue("style", genre, language),
           value: genre,
-          description: "按电影类型缩小图库。"
+          description: libraryCopy(language, "Narrow the gallery by movie genre.", "按电影类型缩小图库。")
         }))
       ]
     },
     {
       key: "era",
-      label: filterLabels.era,
+      label: filterLabels.era[language],
       options: [
-        { label: "全部年代", value: "all", description: "查看所有年份作品。" },
+        { label: libraryCopy(language, "All Years", "全部年代"), value: "all", description: libraryCopy(language, "View work across every year.", "查看所有年份作品。") },
         ...years.map((year) => ({
           label: year,
           value: year,
-          description: "只展示该年份的海报。"
+          description: libraryCopy(language, "Show posters from this year only.", "只展示该年份的海报。")
         })),
-        { label: "Archive", value: "archive", description: "查看更早期归档作品。" }
+        { label: libraryCopy(language, "Archive", "归档"), value: "archive", description: libraryCopy(language, "View earlier archived work.", "查看更早期归档作品。") }
       ]
     },
     {
       key: "style",
-      label: filterLabels.style,
-      options: buildAttributeOptions(posters, "style", "全部风格", "从画面风格进入图库。")
+      label: filterLabels.style[language],
+      options: buildAttributeOptions(posters, "style", language, libraryCopy(language, "All Styles", "全部风格"), libraryCopy(language, "Enter the gallery through visual style.", "从画面风格进入图库。"))
     },
     {
       key: "mood",
-      label: filterLabels.mood,
-      options: buildAttributeOptions(posters, "mood", "全部氛围", "用情绪线索筛选海报。")
+      label: filterLabels.mood[language],
+      options: buildAttributeOptions(posters, "mood", language, libraryCopy(language, "All Moods", "全部氛围"), libraryCopy(language, "Filter with emotional cues.", "用情绪线索筛选海报。"))
     },
     {
       key: "tone",
-      label: filterLabels.tone,
-      options: buildAttributeOptions(posters, "tone", "全部色调", "按综合色彩气质查找。")
+      label: filterLabels.tone[language],
+      options: buildAttributeOptions(posters, "tone", language, libraryCopy(language, "All Tones", "全部色调"), libraryCopy(language, "Search by overall color character.", "按综合色彩气质查找。"))
     },
     {
       key: "composition",
-      label: filterLabels.composition,
-      options: buildAttributeOptions(posters, "composition", "全部构图", "按主体位置和画面结构筛选。")
+      label: filterLabels.composition[language],
+      options: buildAttributeOptions(posters, "composition", language, libraryCopy(language, "All Compositions", "全部构图"), libraryCopy(language, "Filter by subject placement and frame structure.", "按主体位置和画面结构筛选。"))
     }
   ];
+}
+
+function libraryCopy(language: Language, english: string, chinese: string) {
+  return language === "zh-CN" ? chinese : english;
 }
 
 function buildAttributeOptions(
   posters: PosterRecord[],
   attribute: keyof PosterRecord["attributes"],
+  language: Language,
   allLabel: string,
   description: string
 ) {
-  const values = uniqueOptions(posters.map((poster) => poster.attributes[attribute]));
+  const values = uniqueOptions(posters.flatMap((poster) => getPosterAttributeFilterValues(poster, attribute)));
 
   return [
     { label: allLabel, value: "all", description },
     ...values.map((value) => ({
-      label: value,
+      label: formatPosterAttributeValue(attribute, value, language),
       value,
       description
     }))
   ];
 }
 
-function matchesFilters(poster: PosterRecord, filters: ActiveFilters) {
+export function matchesFilters(poster: PosterRecord, filters: ActiveFilters) {
   const director = poster.director ?? "";
 
   return (
     (filters.director === "all" || director === filters.director) &&
-    (filters.type === "all" || formatGenreLabel(poster.genre) === filters.type) &&
+    (filters.type === "all" || getPosterGenreFilterValues(poster).includes(filters.type)) &&
     (filters.era === "all" ||
       (filters.era === "archive" ? Number(poster.year) < 2024 : poster.year === filters.era)) &&
-    (filters.style === "all" || poster.attributes.style === filters.style) &&
-    (filters.mood === "all" || poster.attributes.mood === filters.mood) &&
-    (filters.tone === "all" || poster.attributes.tone === filters.tone) &&
+    (filters.style === "all" || getPosterAttributeFilterValues(poster, "style").includes(filters.style)) &&
+    (filters.mood === "all" || getPosterAttributeFilterValues(poster, "mood").includes(filters.mood)) &&
+    (filters.tone === "all" || getPosterAttributeFilterValues(poster, "tone").includes(filters.tone)) &&
     (filters.composition === "all" || poster.attributes.composition === filters.composition)
   );
 }
