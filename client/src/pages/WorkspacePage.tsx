@@ -251,8 +251,14 @@ type ReferenceImageState = {
   url: string;
 };
 
+type DrawPanelParameter = {
+  label: string;
+  value: string;
+};
+
 type ChatGenerationRecord = {
   createdAt: string;
+  drawParameters?: DrawPanelParameter[];
   id: string;
   insight: string;
   mode: WorkspaceMode;
@@ -625,6 +631,11 @@ export function WorkspacePage() {
   }
 
   function selectPanelMode(nextMode: WorkspaceMode) {
+    if (nextMode === "chat" && panelRecord?.mode === "draw") {
+      setChatDraft("");
+      setReferenceImage(null);
+    }
+
     updateMode(nextMode);
     setIsFloatingComposerExpanded(false);
   }
@@ -946,20 +957,21 @@ export function WorkspacePage() {
     }
 
     const requestId = `draw-${Date.now()}`;
-    const drawPrompt = buildDrawPrompt(selectedPoster, drawState);
+    const drawPrompt = buildDrawPrompt(drawState);
     const drawRatioId = resolveDrawRatioId(selectedPoster, drawState);
     const nextRecord: ChatGenerationRecord = {
       createdAt: new Date().toISOString(),
+      drawParameters: buildDrawPanelParameters(drawState, language),
       id: requestId,
-      insight: workspaceCopy(language, "Parsing AI Draw parameters, reference poster, and weights.", "正在解析 AI Draw 参数、参考海报与权重。"),
+      insight: workspaceCopy(language, "Parsing selected AI Draw parameters.", "正在解析已选 AI Draw 参数。"),
       mode: "draw",
       modelId: selectedModelId,
       posterTitle: getPosterTitle(selectedPoster, language),
       prompt: drawPrompt,
       progress: null,
       ratioId: drawRatioId,
-      referenceImageName: getPosterTitle(selectedPoster, language),
-      referenceImageUrl: selectedPoster.imageUrl,
+      referenceImageName: "",
+      referenceImageUrl: "",
       results: [],
       source,
       status: "submitting",
@@ -1061,6 +1073,7 @@ export function WorkspacePage() {
     const posterTitle = poster ? getPosterTitle(poster, language) : "AI Draw";
     const nextRecord: ChatGenerationRecord = {
       createdAt: new Date().toISOString(),
+      drawParameters: buildDrawPanelParameters(drawState, language),
       id: requestId,
       insight: message,
       mode: "draw",
@@ -1073,8 +1086,8 @@ export function WorkspacePage() {
         timestamp: new Date().toISOString()
       },
       ratioId: poster ? resolveDrawRatioId(poster, drawState) : selectedRatioId,
-      referenceImageName: posterTitle === "AI Draw" ? "" : posterTitle,
-      referenceImageUrl: poster?.imageUrl ?? "",
+      referenceImageName: "",
+      referenceImageUrl: "",
       results: [],
       source,
       status: "failed",
@@ -2066,6 +2079,7 @@ function DrawPanelComposer({
                         {posterPresetValue ? (
                           <>
                             <DrawDropdownOption
+                              description={workspaceCopy(language, "Use the reverse-engineered value from the selected poster.", "使用所选海报解析出的选项。")}
                               label={workspaceCopy(language, `Poster analysis: ${posterPresetValue}`, `海报解析：${posterPresetValue}`)}
                               selected={moduleState.importedValue === posterPresetValue}
                               onClick={() => {
@@ -2082,6 +2096,7 @@ function DrawPanelComposer({
                         ) : null}
                         {drawParameterOptions[module.key].map((option) => (
                           <DrawDropdownOption
+                            description={option.description}
                             key={option.value}
                             label={formatDrawOptionLabel(module.key, option.value, language)}
                             selected={moduleState.selectedValue === option.value}
@@ -2535,6 +2550,7 @@ function GenerationDeckPanel({
 
                 <div className="flex min-h-0 flex-col">
                   <GenerationTaskSidebar
+                    drawParameters={panelRecord.drawParameters}
                     modelId={panelRecord.modelId}
                     mode={panelRecord.mode}
                     prompt={panelRecord.prompt}
@@ -2666,21 +2682,13 @@ function GenerationVariationTile({
       <div className="absolute top-2 left-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
         {formatGenerationImageIndex(index)}
       </div>
-      {record.status !== "succeeded" ? (
+      {record.status !== "succeeded" && record.status !== "draft" ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black/42">
-          <div className="mx-4 max-w-[16rem] text-center">
-            {record.status === "submitting" ? (
-              <div className="flex justify-center">
-                <GenerationSpinner sizeClassName="h-6 w-6" tone="light" />
-              </div>
-            ) : null}
-            <p className="mt-3 text-[10px] font-bold tracking-[0.22em] text-slate-300 uppercase">
-              {record.status === "failed" ? workspaceCopy(language, "Generation Failed", "生成失败") : workspaceCopy(language, "Real Progress", "真实进度")}
-            </p>
-            <p className="mt-2 line-clamp-3 text-xs leading-5 font-semibold text-white">
-              {record.status === "failed" ? record.insight : record.progress?.message ?? workspaceCopy(language, "Waiting for real backend generation progress", "等待后端返回真实生图进度")}
-            </p>
-          </div>
+          {record.status === "submitting" ? (
+            <GenerationSpinner sizeClassName="h-8 w-8" tone="light" />
+          ) : (
+            <span aria-hidden="true" className="h-8 w-8 rounded-full border-2 border-[#ffb4aa]/70" />
+          )}
         </div>
       ) : null}
       {result.imageUrl ? (
@@ -2724,29 +2732,51 @@ function GenerationThumbnailPlaceholder({
 }
 
 function GenerationTaskSidebar({
+  drawParameters,
   modelId,
   mode,
   prompt,
   ratioId
 }: {
+  drawParameters?: DrawPanelParameter[];
   modelId: string;
   mode: WorkspaceMode;
   prompt: string;
   ratioId: string;
 }) {
   const { language } = useI18n();
+  const displayDrawParameters = resolveDrawParametersForDisplay(mode, prompt, drawParameters, language);
 
   return (
     <aside className="px-1 py-2 text-neutral-100">
       <div className="space-y-4">
-        <div>
-          <p className="text-[10px] font-extrabold tracking-[0.24em] text-white/38 uppercase">
-            {workspaceCopy(language, "Prompt", "提示词")}
-          </p>
-          <p className="mt-2 max-h-28 overflow-y-auto pr-1 text-sm leading-6 text-white/80 italic">
-            {prompt.trim() || defaultPromptText}
-          </p>
-        </div>
+        {mode === "draw" ? (
+          <div>
+            <p className="text-[10px] font-extrabold tracking-[0.24em] text-white/38 uppercase">
+              {workspaceCopy(language, "AI Draw Parameters", "AI Draw 参数")}
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {displayDrawParameters.map((item) => (
+                <div
+                  key={`${item.label}-${item.value}`}
+                  className="inline-flex h-11 min-w-0 cursor-default items-center justify-between gap-2 rounded-lg border border-[#ffb4aa]/16 bg-[#ffb4aa]/18 px-3 text-xs font-bold text-[#ffd9d5]/78 shadow-none"
+                >
+                  <span className="min-w-0 shrink-0 truncate text-[10px] font-bold tracking-[0.14em] uppercase text-[#ffe2df]/72">{item.label}</span>
+                  <span className="min-w-0 truncate text-right text-xs font-bold tracking-normal normal-case text-[#fff0ee]/82">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-[10px] font-extrabold tracking-[0.24em] text-white/38 uppercase">
+              {workspaceCopy(language, "Prompt", "提示词")}
+            </p>
+            <p className="mt-2 max-h-28 overflow-y-auto pr-1 text-sm leading-6 text-white/80 italic">
+              {prompt.trim() || defaultPromptText}
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm leading-6 font-semibold text-white/82">
           <span>{formatWorkspaceModeLabel(mode)}</span>
@@ -2847,7 +2877,7 @@ function buildDisplayResults(record: ChatGenerationRecord, language: Language) {
   return [
     {
       id: `${record.id}-pending`,
-      imageUrl: record.referenceImageUrl,
+      imageUrl: record.status === "draft" ? record.referenceImageUrl : "",
       summary: record.progress?.message ?? record.insight,
       title: workspaceCopy(language, `${record.posterTitle} - Generating`, `${record.posterTitle} - 生成中`)
     }
@@ -3093,6 +3123,7 @@ function DrawWorkspace({
                         {posterPresetValue ? (
                           <>
                             <DrawDropdownOption
+                              description={workspaceCopy(language, "Use the reverse-engineered value from the selected poster.", "使用所选海报解析出的选项。")}
                               label={workspaceCopy(language, `Poster analysis: ${posterPresetValue}`, `海报解析：${posterPresetValue}`)}
                               selected={moduleState.importedValue === posterPresetValue}
                               onClick={() => {
@@ -3109,6 +3140,7 @@ function DrawWorkspace({
                         ) : null}
                         {drawParameterOptions[module.key].map((option) => (
                           <DrawDropdownOption
+                            description={option.description}
                             key={option.value}
                             label={formatDrawOptionLabel(module.key, option.value, language)}
                             selected={moduleState.selectedValue === option.value}
@@ -3209,17 +3241,19 @@ function DrawParameterButton({
 
 function DrawDropdownPanel({ children }: { children: ReactNode }) {
   return (
-    <div className="absolute top-full left-0 z-50 mt-2 w-full overflow-hidden rounded-lg bg-[#181918]/98 p-1.5 text-neutral-100 shadow-[0_18px_38px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+    <div className="absolute bottom-full left-0 z-50 mb-3 w-[min(22rem,calc(100vw-3rem))] origin-bottom-left overflow-hidden rounded-lg border border-white/10 bg-[#181918]/96 p-2 text-neutral-100 shadow-none backdrop-blur-xl">
       <div className="max-h-[18rem] overflow-y-auto">{children}</div>
     </div>
   );
 }
 
 function DrawDropdownOption({
+  description,
   label,
   onClick,
   selected
 }: {
+  description?: string;
   label: string;
   onClick: () => void;
   selected: boolean;
@@ -3228,12 +3262,15 @@ function DrawDropdownOption({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 text-left text-sm font-semibold transition ${
+      className={`flex w-full cursor-pointer items-start justify-between gap-4 rounded-md px-3 py-2.5 text-left text-sm font-semibold transition ${
         selected ? "bg-white/8 text-white" : "text-neutral-300 hover:bg-white/8 hover:text-white"
       }`}
     >
-      <span className="min-w-0 truncate">{label}</span>
-      <span className={`shrink-0 text-sm font-semibold ${selected ? "text-[#ffb4aa]" : "text-transparent"}`}>✓</span>
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-sm leading-5 font-semibold">{label}</p>
+        {description ? <p className={`text-xs leading-5 ${selected ? "text-neutral-400" : "text-neutral-500"}`}>{description}</p> : null}
+      </div>
+      <span className={`mt-0.5 shrink-0 text-sm font-semibold ${selected ? "text-[#ffb4aa]" : "text-transparent"}`}>✓</span>
     </button>
   );
 }
@@ -3426,7 +3463,7 @@ function getReadyDrawModuleKeys(drawState: DrawModuleState) {
     .map((module) => module.key);
 }
 
-function buildDrawPrompt(selectedPoster: PosterRecord, drawState: DrawModuleState) {
+function buildDrawPrompt(drawState: DrawModuleState) {
   const modules = getReadyDrawModuleKeys(drawState).map((moduleKey) => {
     const module = drawModules.find((item) => item.key === moduleKey);
     const moduleState = drawState[moduleKey];
@@ -3440,10 +3477,7 @@ function buildDrawPrompt(selectedPoster: PosterRecord, drawState: DrawModuleStat
     };
   });
 
-  return buildAiDrawPrompt({
-    modules,
-    posterTitle: selectedPoster.title
-  });
+  return buildAiDrawPrompt({ modules });
 }
 
 function resolveDrawRatioId(selectedPoster: PosterRecord, drawState: DrawModuleState) {
@@ -3487,6 +3521,52 @@ function buildDrawComposerPreview(drawState: DrawModuleState) {
   }
 
   return activeLines.join("\n");
+}
+
+function buildDrawPanelParameters(drawState: DrawModuleState, language: Language): DrawPanelParameter[] {
+  return getReadyDrawModuleKeys(drawState).map((moduleKey) => {
+    const moduleState = drawState[moduleKey];
+
+    return {
+      label: formatDrawModuleLabel(moduleKey, language),
+      value: moduleState.importedValue.trim()
+    };
+  });
+}
+
+function resolveDrawParametersForDisplay(
+  mode: WorkspaceMode,
+  prompt: string,
+  drawParameters: DrawPanelParameter[] | undefined,
+  language: Language
+) {
+  if (mode !== "draw") {
+    return [];
+  }
+
+  if (drawParameters?.length) {
+    return drawParameters;
+  }
+
+  const legacyParameters = prompt
+    .split("\n")
+    .map((line) => line.match(/^-\s*([^:：]+)[:：]\s*(.+?)(?:（权重\s*\d+%）)?$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match) => ({
+      label: match[1].trim(),
+      value: match[2].trim()
+    }));
+
+  if (legacyParameters.length > 0) {
+    return legacyParameters;
+  }
+
+  return [
+    {
+      label: workspaceCopy(language, "AI Draw", "AI Draw"),
+      value: workspaceCopy(language, "Selected parameters", "已选参数")
+    }
+  ];
 }
 
 function isDrawModuleActive(moduleState: DrawModuleState[DrawModuleKey]) {

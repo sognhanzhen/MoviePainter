@@ -1,8 +1,7 @@
 import type {
   PosterRecord,
   WorkspaceGeneratedResult,
-  WorkspaceGenerationInput,
-  WorkspaceMode
+  WorkspaceGenerationInput
 } from "../domain/app-data.js";
 
 export type AicanapiImageGeneratorConfig = {
@@ -844,94 +843,11 @@ function buildImagePrompt(input: {
   model: ResolvedModel;
   poster: PosterRecord;
 }) {
-  return input.generation.mode === "chat" ? buildAiChatImagePrompt(input) : buildAiDrawImagePrompt(input);
-}
+  void input.aspectRatio;
+  void input.model;
+  void input.poster;
 
-function buildAiChatImagePrompt(input: {
-  aspectRatio: string;
-  generation: WorkspaceGenerationInput;
-  model: ResolvedModel;
-  poster: PosterRecord;
-}) {
-  return [
-    "Create one finished cinematic movie poster image for direct display in a web application.",
-    "AI Chat mode: the reference poster is a broad style compass.",
-    "Use the reference for overall movie-poster taste, cinematic texture, lighting logic, genre feeling, and production value.",
-    "Do not copy the reference poster's exact characters, title design, layout, or scene one-to-one.",
-    "Do not return explanations. The image should be polished, poster-like, and visually readable.",
-    "Avoid random unreadable typography; if text appears, keep it subtle and poster-appropriate.",
-    `Model route: ${input.model.label}`,
-    `Mode: ${formatMode(input.generation.mode)}`,
-    `Aspect ratio: ${input.aspectRatio}`,
-    `Final canvas must be ${input.aspectRatio}; do not return a square image unless the aspect ratio is 1:1.`,
-    `User prompt: ${input.generation.prompt}`,
-    `Reference title: ${input.poster.title}`,
-    `Reference genre: ${input.poster.genre}`,
-    `Reference summary: ${input.poster.summary}`,
-    `Reference description: ${input.poster.description}`,
-    `Reference overall character language: ${input.poster.attributes.character}`,
-    `Reference overall style: ${input.poster.attributes.style}`,
-    `Reference overall atmosphere: ${input.poster.attributes.mood}`,
-    `Reference overall color tone: ${input.poster.attributes.tone}`,
-    `Reference overall composition: ${input.poster.attributes.composition}`
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildAiDrawImagePrompt(input: {
-  aspectRatio: string;
-  generation: WorkspaceGenerationInput;
-  model: ResolvedModel;
-  poster: PosterRecord;
-}) {
-  const selectedDimensions = input.generation.selectedModules.map(formatDrawDimensionLabel).join("、");
-  const moduleWeights = Object.entries(input.generation.moduleWeights)
-    .map(([key, value]) => `${formatDrawDimensionLabel(key)} ${value}%`)
-    .join(", ");
-
-  return [
-    "Create one finished cinematic movie poster image for direct display in a web application.",
-    "AI Draw mode: only apply the poster dimensions explicitly selected by the user.",
-    "Do not transfer unselected reference-poster dimensions. Do not silently copy the whole poster style.",
-    "The Event dimension is user-defined; never invent an event from the reference poster when the user leaves Event empty.",
-    "Do not return explanations. The image should be polished, poster-like, and visually readable.",
-    "Avoid random unreadable typography; if text appears, keep it subtle and poster-appropriate.",
-    `Model route: ${input.model.label}`,
-    `Mode: ${formatMode(input.generation.mode)}`,
-    `Aspect ratio: ${input.aspectRatio}`,
-    `Final canvas must be ${input.aspectRatio}; do not return a square image unless the aspect ratio is 1:1.`,
-    `Authoritative AI Draw package:\n${input.generation.prompt}`,
-    `Reference title: ${input.poster.title}`,
-    selectedDimensions ? `Selected dimensions: ${selectedDimensions}` : "Selected dimensions: none",
-    moduleWeights ? `Module weights: ${moduleWeights}` : ""
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function formatMode(mode: WorkspaceMode) {
-  return mode === "chat" ? "AI Chat" : "AI Draw";
-}
-
-function formatDrawDimensionLabel(key: string) {
-  const labels: Record<string, string> = {
-    atmosphere: "氛围",
-    character: "人物",
-    characterPosition: "人物位置",
-    composition: "构图",
-    era: "年代",
-    event: "事件",
-    mood: "氛围",
-    proportion: "比例",
-    ratio: "比例",
-    scene: "场景",
-    shotScale: "人物景别",
-    style: "风格",
-    tone: "色调"
-  };
-
-  return labels[key] ?? key;
+  return input.generation.prompt;
 }
 
 function resolveBaseUrl(baseUrl: string) {
