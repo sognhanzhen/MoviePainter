@@ -1312,7 +1312,7 @@ export function WorkspacePage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={index}
@@ -1321,7 +1321,7 @@ export function WorkspacePage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {posters.map((poster) => {
                 const isSelected = selectedPoster?.id === poster.id;
 

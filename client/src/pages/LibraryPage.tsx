@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { PosterDetailModal } from "../components/PosterDetailModal";
 import { PosterMosaicCard } from "../components/PosterMosaicCard";
-import type { PosterRecord, WorkspaceMode } from "../data/posters";
+import type { PosterCatalogCategory, PosterRecord, PosterShortDramaKind, WorkspaceMode } from "../data/posters";
 import { usePosterCatalog } from "../hooks/usePosterCatalog";
 import type { Language } from "../i18n/messages";
 import { useI18n } from "../i18n/useI18n";
@@ -26,6 +26,37 @@ const filterLabels = {
   type: { "en-US": "Genre", "zh-CN": "类型" }
 } as const;
 
+const catalogCategoryOptions = [
+  {
+    description: { "en-US": "Feature films and cinema references.", "zh-CN": "电影长片与影院级视觉参考。" },
+    label: { "en-US": "Movie", "zh-CN": "电影" },
+    value: "movie"
+  },
+  {
+    description: { "en-US": "Serialized drama and television key art.", "zh-CN": "电视剧与长剧集主视觉。" },
+    label: { "en-US": "Series", "zh-CN": "电视剧" },
+    value: "series"
+  },
+  {
+    description: { "en-US": "Short-form drama posters.", "zh-CN": "短剧海报与竖屏叙事视觉。" },
+    label: { "en-US": "Short Drama", "zh-CN": "短剧" },
+    value: "short-drama"
+  }
+] as const satisfies ReadonlyArray<{
+  description: Record<Language, string>;
+  label: Record<Language, string>;
+  value: PosterCatalogCategory;
+}>;
+
+const shortDramaKindOptions = [
+  { label: { "en-US": "All Shorts", "zh-CN": "全部短剧" }, value: "all" },
+  { label: { "en-US": "Live Action", "zh-CN": "真人" }, value: "live-action" },
+  { label: { "en-US": "Animation", "zh-CN": "动漫" }, value: "animation" }
+] as const satisfies ReadonlyArray<{
+  label: Record<Language, string>;
+  value: PosterShortDramaKind | "all";
+}>;
+
 type FilterKey = keyof typeof filterLabels;
 
 type FilterOption = {
@@ -42,6 +73,8 @@ type FilterDefinition = {
 
 type ActiveFilters = Record<FilterKey, string>;
 
+type FilterStateByCategory = Record<PosterCatalogCategory, ActiveFilters>;
+
 const defaultFilters: ActiveFilters = {
   composition: "all",
   director: "all",
@@ -52,11 +85,19 @@ const defaultFilters: ActiveFilters = {
   type: "all"
 };
 
+const defaultFilterStateByCategory: FilterStateByCategory = {
+  movie: defaultFilters,
+  series: defaultFilters,
+  "short-drama": defaultFilters
+};
+
 export function LibraryPage() {
   const { token } = useAuth();
   const { language } = useI18n();
   const navigate = useNavigate();
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(defaultFilters);
+  const [activeCategory, setActiveCategory] = useState<PosterCatalogCategory>("movie");
+  const [activeShortDramaKind, setActiveShortDramaKind] = useState<PosterShortDramaKind | "all">("all");
+  const [filterStateByCategory, setFilterStateByCategory] = useState<FilterStateByCategory>(defaultFilterStateByCategory);
   const [openFilter, setOpenFilter] = useState<FilterKey | null>(null);
   const [selectedPoster, setSelectedPoster] = useState<PosterRecord | null>(null);
   const [selectingMode, setSelectingMode] = useState(false);
@@ -77,6 +118,7 @@ export function LibraryPage() {
   const [syncingTmdb, setSyncingTmdb] = useState(false);
   const [hasMoreTmdb, setHasMoreTmdb] = useState(true);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const activeFilters = filterStateByCategory[activeCategory];
 
 
   useEffect(() => {
@@ -108,6 +150,7 @@ export function LibraryPage() {
                style: "写实",
                tone: "未知"
              },
+             catalogCategory: "movie",
              description: "TMDB Sync Data"
           }));
           setTmdbPosters((prev) => {
@@ -164,32 +207,40 @@ export function LibraryPage() {
     };
   }, [openFilter]);
 
+  const categoryPosters = useMemo(() => {
+    return allPosters.filter((poster) => matchesCatalogSelection(poster, activeCategory, activeShortDramaKind));
+  }, [activeCategory, activeShortDramaKind, allPosters]);
+
   const filterDefinitions = useMemo(() => {
-    return buildFilterDefinitions(allPosters, language);
-  }, [allPosters, language]);
+    return buildFilterDefinitions(categoryPosters, language, activeCategory);
+  }, [activeCategory, categoryPosters, language]);
 
   const visiblePosters = useMemo(() => {
-    return allPosters.filter((poster) => {
+    return categoryPosters.filter((poster) => {
       return matchesFilters(poster, activeFilters);
     });
-  }, [activeFilters, allPosters]);
+  }, [activeFilters, categoryPosters]);
   const hasActiveFilter = Object.values(activeFilters).some((value) => value !== "all");
   const displayPosters = hasActiveFilter ? visiblePosters : padPosterRow(visiblePosters);
   const paginatedPosters = useMemo(() => displayPosters.slice(0, visiblePage * VISIBLE_PER_PAGE), [displayPosters, visiblePage]);
   const hasMoreLocal = paginatedPosters.length < displayPosters.length;
 
   useEffect(() => {
+    setVisiblePage(1);
+  }, [activeCategory, activeFilters, activeShortDramaKind]);
+
+  useEffect(() => {
     observerRef.current = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         if (hasMoreLocal) {
           setVisiblePage(p => p + 1);
-        } else if (hasMoreTmdb && !syncingTmdb) {
+        } else if (activeCategory === "movie" && hasMoreTmdb && !syncingTmdb) {
           setTmdbPage((prev) => prev + 1);
         }
       }
     });
     return () => observerRef.current?.disconnect();
-  }, [hasMoreLocal, hasMoreTmdb, syncingTmdb]);
+  }, [activeCategory, hasMoreLocal, hasMoreTmdb, syncingTmdb]);
 
   const lastElementRef = (node: HTMLElement | null) => {
     if (loading || syncingTmdb) return;
@@ -234,52 +285,88 @@ export function LibraryPage() {
         </p>
       ) : null}
 
-      <div ref={filtersRef} className="relative z-20 flex flex-wrap justify-start gap-3">
-        {filterDefinitions.map((filter) => {
-          const currentValue = activeFilters[filter.key];
-          const currentOption = filter.options.find((option) => option.value === currentValue) ?? filter.options[0];
+      <div ref={filtersRef} className="relative z-20 space-y-4">
+        <div className="flex flex-wrap justify-start gap-3">
+          {catalogCategoryOptions.map((category) => (
+            <LibraryCategoryButton
+              key={category.value}
+              active={activeCategory === category.value}
+              description={category.description[language]}
+              label={category.label[language]}
+              onClick={() => {
+                setActiveCategory(category.value);
+                setOpenFilter(null);
+              }}
+            />
+          ))}
+        </div>
 
-          return (
-            <div key={filter.key} className="relative">
-              <LibraryFilterButton
-                active={currentValue !== "all"}
-                isOpen={openFilter === filter.key}
-                label={filter.label}
-                value={currentOption.label}
-                onToggle={() => setOpenFilter((current) => (current === filter.key ? null : filter.key))}
+        {activeCategory === "short-drama" ? (
+          <div className="flex flex-wrap justify-start gap-2">
+            {shortDramaKindOptions.map((option) => (
+              <LibraryPillButton
+                key={option.value}
+                active={activeShortDramaKind === option.value}
+                label={option.label[language]}
+                onClick={() => {
+                  setActiveShortDramaKind(option.value);
+                  setOpenFilter(null);
+                }}
               />
-              {openFilter === filter.key ? (
-                <LibraryFilterPanel className={filter.key === "composition" ? "right-0" : "left-0"}>
-                  {filter.options.map((option) => (
-                    <LibraryFilterOption
-                      key={option.value}
-                      description={option.description}
-                      label={option.label}
-                      selected={currentValue === option.value}
-                      onClick={() => {
-                        setActiveFilters((current) => ({
-                          ...current,
-                          [filter.key]: option.value
-                        }));
-                        setOpenFilter(null);
-                      }}
-                    />
-                  ))}
-                </LibraryFilterPanel>
-              ) : null}
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap justify-start gap-3">
+          {filterDefinitions.map((filter) => {
+            const currentValue = activeFilters[filter.key];
+            const currentOption = filter.options.find((option) => option.value === currentValue) ?? filter.options[0];
+
+            return (
+              <div key={filter.key} className="relative">
+                <LibraryFilterButton
+                  active={currentValue !== "all"}
+                  isOpen={openFilter === filter.key}
+                  label={filter.label}
+                  value={currentOption.label}
+                  onToggle={() => setOpenFilter((current) => (current === filter.key ? null : filter.key))}
+                />
+                {openFilter === filter.key ? (
+                  <LibraryFilterPanel className={filter.key === "composition" ? "right-0" : "left-0"}>
+                    {filter.options.map((option) => (
+                      <LibraryFilterOption
+                        key={option.value}
+                        description={option.description}
+                        label={option.label}
+                        selected={currentValue === option.value}
+                        onClick={() => {
+                          setFilterStateByCategory((current) => ({
+                            ...current,
+                            [activeCategory]: {
+                              ...current[activeCategory],
+                              [filter.key]: option.value
+                            }
+                          }));
+                          setOpenFilter(null);
+                        }}
+                      />
+                    ))}
+                  </LibraryFilterPanel>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {loading ? (
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="aspect-[3/4] animate-pulse rounded-lg bg-white/8" />
           ))}
         </section>
       ) : visiblePosters.length > 0 ? (
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {paginatedPosters.map((poster, index) => (
             <PosterMosaicCard
               key={`${poster.id}-${index}`}
@@ -307,7 +394,7 @@ export function LibraryPage() {
             <div className="h-2 w-2 animate-bounce rounded-full bg-[#ffb4aa] [animation-delay:0.2s]"></div>
             <div className="h-2 w-2 animate-bounce rounded-full bg-[#ffb4aa] [animation-delay:0.4s]"></div>
           </div>
-        ) : hasMoreTmdb && !hasMoreLocal ? (
+        ) : activeCategory === "movie" && hasMoreTmdb && !hasMoreLocal ? (
           <button
             type="button"
             onClick={() => setTmdbPage(prev => prev + 1)}
@@ -354,6 +441,59 @@ export function LibraryPage() {
         />
       ) : null}
     </section>
+  );
+}
+
+function LibraryCategoryButton({
+  active,
+  description,
+  label,
+  onClick
+}: {
+  active: boolean;
+  description: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group inline-flex min-h-14 cursor-pointer flex-col justify-center rounded-lg px-5 text-left transition ${
+        active
+          ? "bg-gradient-to-r from-[#ffb4aa] to-[#e50914] text-[#410001] shadow-lg shadow-[#e50914]/20"
+          : "bg-white/7 text-neutral-300 hover:bg-white/12 hover:text-white"
+      }`}
+    >
+      <span className="text-xs font-extrabold tracking-[0.18em] uppercase">{label}</span>
+      <span className={`mt-1 max-w-[13rem] truncate text-[10px] font-semibold tracking-normal normal-case ${active ? "text-[#410001]/72" : "text-neutral-500 group-hover:text-neutral-400"}`}>
+        {description}
+      </span>
+    </button>
+  );
+}
+
+function LibraryPillButton({
+  active,
+  label,
+  onClick
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-8 cursor-pointer rounded-lg px-4 text-[10px] font-extrabold tracking-[0.18em] uppercase transition ${
+        active
+          ? "bg-white text-slate-950"
+          : "bg-white/7 text-neutral-400 hover:bg-white/12 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -435,7 +575,11 @@ function LibraryFilterOption({
   );
 }
 
-export function buildFilterDefinitions(posters: PosterRecord[], language: Language): FilterDefinition[] {
+export function buildFilterDefinitions(
+  posters: PosterRecord[],
+  language: Language,
+  category: PosterCatalogCategory = "movie"
+): FilterDefinition[] {
   const genres = uniqueOptions(posters.flatMap((poster) => getPosterGenreFilterValues(poster)));
   const years = uniqueOptions(posters.map((poster) => poster.year).sort((a, b) => Number(b) - Number(a)));
   const directors = uniqueOptions(posters.map((poster) => poster.director ?? "").filter(Boolean));
@@ -443,66 +587,188 @@ export function buildFilterDefinitions(posters: PosterRecord[], language: Langua
   return [
     {
       key: "director",
-      label: filterLabels.director[language],
+      label: formatFilterLabel("director", category, language),
       options: [
-        { label: libraryCopy(language, "All Directors", "全部导演"), value: "all", description: libraryCopy(language, "Browse the full director visual spectrum.", "浏览完整导演视觉谱系。") },
+        {
+          label: formatAllFilterValue("director", category, language),
+          value: "all",
+          description: formatFilterDescription("director", category, language)
+        },
         ...directors.map((director) => ({
           label: formatDirectorValue(director, language),
           value: director,
-          description: libraryCopy(language, "Filter posters by director sensibility.", "按导演气质筛选海报。")
+          description: formatFilterOptionDescription("director", category, language)
         }))
       ]
     },
     {
       key: "type",
-      label: filterLabels.type[language],
+      label: formatFilterLabel("type", category, language),
       options: [
-        { label: libraryCopy(language, "All Genres", "全部类型"), value: "all", description: libraryCopy(language, "Keep every movie genre visible.", "保留所有电影类型。") },
+        {
+          label: formatAllFilterValue("type", category, language),
+          value: "all",
+          description: formatFilterDescription("type", category, language)
+        },
         ...genres.map((genre) => ({
           label: formatPosterAttributeValue("style", genre, language),
           value: genre,
-          description: libraryCopy(language, "Narrow the gallery by movie genre.", "按电影类型缩小图库。")
+          description: formatFilterOptionDescription("type", category, language)
         }))
       ]
     },
     {
       key: "era",
-      label: filterLabels.era[language],
+      label: formatFilterLabel("era", category, language),
       options: [
-        { label: libraryCopy(language, "All Years", "全部年代"), value: "all", description: libraryCopy(language, "View work across every year.", "查看所有年份作品。") },
+        {
+          label: formatAllFilterValue("era", category, language),
+          value: "all",
+          description: formatFilterDescription("era", category, language)
+        },
         ...years.map((year) => ({
           label: year,
           value: year,
-          description: libraryCopy(language, "Show posters from this year only.", "只展示该年份的海报。")
+          description: formatFilterOptionDescription("era", category, language)
         })),
         { label: libraryCopy(language, "Archive", "归档"), value: "archive", description: libraryCopy(language, "View earlier archived work.", "查看更早期归档作品。") }
       ]
     },
     {
       key: "style",
-      label: filterLabels.style[language],
-      options: buildAttributeOptions(posters, "style", language, libraryCopy(language, "All Styles", "全部风格"), libraryCopy(language, "Enter the gallery through visual style.", "从画面风格进入图库。"))
+      label: formatFilterLabel("style", category, language),
+      options: buildAttributeOptions(posters, "style", language, formatAllFilterValue("style", category, language), formatFilterDescription("style", category, language))
     },
     {
       key: "mood",
-      label: filterLabels.mood[language],
-      options: buildAttributeOptions(posters, "mood", language, libraryCopy(language, "All Moods", "全部氛围"), libraryCopy(language, "Filter with emotional cues.", "用情绪线索筛选海报。"))
+      label: formatFilterLabel("mood", category, language),
+      options: buildAttributeOptions(posters, "mood", language, formatAllFilterValue("mood", category, language), formatFilterDescription("mood", category, language))
     },
     {
       key: "tone",
-      label: filterLabels.tone[language],
-      options: buildAttributeOptions(posters, "tone", language, libraryCopy(language, "All Tones", "全部色调"), libraryCopy(language, "Search by overall color character.", "按综合色彩气质查找。"))
+      label: formatFilterLabel("tone", category, language),
+      options: buildAttributeOptions(posters, "tone", language, formatAllFilterValue("tone", category, language), formatFilterDescription("tone", category, language))
     },
     {
       key: "composition",
-      label: filterLabels.composition[language],
-      options: buildAttributeOptions(posters, "composition", language, libraryCopy(language, "All Compositions", "全部构图"), libraryCopy(language, "Filter by subject placement and frame structure.", "按主体位置和画面结构筛选。"))
+      label: formatFilterLabel("composition", category, language),
+      options: buildAttributeOptions(posters, "composition", language, formatAllFilterValue("composition", category, language), formatFilterDescription("composition", category, language))
     }
   ];
 }
 
 function libraryCopy(language: Language, english: string, chinese: string) {
   return language === "zh-CN" ? chinese : english;
+}
+
+function formatFilterLabel(filterKey: FilterKey, category: PosterCatalogCategory, language: Language) {
+  if (filterKey === "director") {
+    if (category === "series") {
+      return libraryCopy(language, "Creator", "主创");
+    }
+
+    if (category === "short-drama") {
+      return libraryCopy(language, "Creator", "出品方");
+    }
+  }
+
+  if (filterKey === "type") {
+    if (category === "series") {
+      return libraryCopy(language, "Series Type", "剧集类型");
+    }
+
+    if (category === "short-drama") {
+      return libraryCopy(language, "Theme", "题材");
+    }
+  }
+
+  return filterLabels[filterKey][language];
+}
+
+function formatAllFilterValue(filterKey: FilterKey, category: PosterCatalogCategory, language: Language) {
+  const allCopy: Record<FilterKey, Record<PosterCatalogCategory, Record<Language, string>>> = {
+    composition: {
+      movie: { "en-US": "All Compositions", "zh-CN": "全部构图" },
+      series: { "en-US": "All Compositions", "zh-CN": "全部构图" },
+      "short-drama": { "en-US": "All Compositions", "zh-CN": "全部构图" }
+    },
+    director: {
+      movie: { "en-US": "All Directors", "zh-CN": "全部导演" },
+      series: { "en-US": "All Creators", "zh-CN": "全部主创" },
+      "short-drama": { "en-US": "All Producers", "zh-CN": "全部出品方" }
+    },
+    era: {
+      movie: { "en-US": "All Years", "zh-CN": "全部年代" },
+      series: { "en-US": "All Years", "zh-CN": "全部年份" },
+      "short-drama": { "en-US": "All Years", "zh-CN": "全部年份" }
+    },
+    mood: {
+      movie: { "en-US": "All Moods", "zh-CN": "全部氛围" },
+      series: { "en-US": "All Moods", "zh-CN": "全部情绪" },
+      "short-drama": { "en-US": "All Hooks", "zh-CN": "全部情绪钩子" }
+    },
+    style: {
+      movie: { "en-US": "All Styles", "zh-CN": "全部风格" },
+      series: { "en-US": "All Styles", "zh-CN": "全部风格" },
+      "short-drama": { "en-US": "All Styles", "zh-CN": "全部风格" }
+    },
+    tone: {
+      movie: { "en-US": "All Tones", "zh-CN": "全部色调" },
+      series: { "en-US": "All Tones", "zh-CN": "全部色调" },
+      "short-drama": { "en-US": "All Tones", "zh-CN": "全部色调" }
+    },
+    type: {
+      movie: { "en-US": "All Genres", "zh-CN": "全部类型" },
+      series: { "en-US": "All Series Types", "zh-CN": "全部剧集类型" },
+      "short-drama": { "en-US": "All Themes", "zh-CN": "全部题材" }
+    }
+  };
+
+  return allCopy[filterKey][category][language];
+}
+
+function formatFilterDescription(filterKey: FilterKey, category: PosterCatalogCategory, language: Language) {
+  if (filterKey === "director") {
+    return category === "movie"
+      ? libraryCopy(language, "Browse the full director visual spectrum.", "浏览完整导演视觉谱系。")
+      : libraryCopy(language, "Keep every creator and production source visible.", "保留所有主创与出品来源。");
+  }
+
+  if (filterKey === "type") {
+    return category === "short-drama"
+      ? libraryCopy(language, "Keep every short-drama theme visible.", "保留所有短剧题材。")
+      : libraryCopy(language, "Keep every genre visible.", "保留所有类型。");
+  }
+
+  if (filterKey === "mood" && category === "short-drama") {
+    return libraryCopy(language, "Filter with emotional hooks.", "用情绪钩子筛选短剧。");
+  }
+
+  const descriptionMap: Record<Exclude<FilterKey, "director" | "type">, Record<Language, string>> = {
+    composition: { "en-US": "Filter by subject placement and frame structure.", "zh-CN": "按主体位置和画面结构筛选。" },
+    era: { "en-US": "View work across every year.", "zh-CN": "查看所有年份作品。" },
+    mood: { "en-US": "Filter with emotional cues.", "zh-CN": "用情绪线索筛选海报。" },
+    style: { "en-US": "Enter the gallery through visual style.", "zh-CN": "从画面风格进入图库。" },
+    tone: { "en-US": "Search by overall color character.", "zh-CN": "按综合色彩气质查找。" }
+  };
+
+  return descriptionMap[filterKey][language];
+}
+
+function formatFilterOptionDescription(filterKey: "director" | "era" | "type", category: PosterCatalogCategory, language: Language) {
+  if (filterKey === "director") {
+    return category === "movie"
+      ? libraryCopy(language, "Filter posters by director sensibility.", "按导演气质筛选海报。")
+      : libraryCopy(language, "Filter posters by creator or production source.", "按主创或出品来源筛选海报。");
+  }
+
+  if (filterKey === "type") {
+    return category === "short-drama"
+      ? libraryCopy(language, "Narrow the gallery by short-drama theme.", "按短剧题材缩小图库。")
+      : libraryCopy(language, "Narrow the gallery by genre.", "按类型缩小图库。");
+  }
+
+  return libraryCopy(language, "Show posters from this year only.", "只展示该年份的海报。");
 }
 
 function buildAttributeOptions(
@@ -537,6 +803,36 @@ export function matchesFilters(poster: PosterRecord, filters: ActiveFilters) {
     (filters.tone === "all" || getPosterAttributeFilterValues(poster, "tone").includes(filters.tone)) &&
     (filters.composition === "all" || poster.attributes.composition === filters.composition)
   );
+}
+
+function matchesCatalogSelection(
+  poster: PosterRecord,
+  category: PosterCatalogCategory,
+  shortDramaKind: PosterShortDramaKind | "all"
+) {
+  if (resolvePosterCatalogCategory(poster) !== category) {
+    return false;
+  }
+
+  if (category !== "short-drama" || shortDramaKind === "all") {
+    return true;
+  }
+
+  return resolvePosterShortDramaKind(poster) === shortDramaKind;
+}
+
+function resolvePosterCatalogCategory(poster: PosterRecord): PosterCatalogCategory {
+  return poster.catalogCategory ?? "movie";
+}
+
+function resolvePosterShortDramaKind(poster: PosterRecord): PosterShortDramaKind {
+  if (poster.catalogSubcategory) {
+    return poster.catalogSubcategory;
+  }
+
+  const searchableText = [poster.genre, poster.region, poster.description, poster.attributes.style, ...poster.tags].join(" ").toLowerCase();
+
+  return /animation|anime|animated|动漫|动画/.test(searchableText) ? "animation" : "live-action";
 }
 
 function uniqueOptions(values: string[]) {

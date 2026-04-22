@@ -8,6 +8,10 @@ export type WorkspaceAssetAction = "library_use" | "workspace_use";
 
 export type HistoryStatus = "failed" | "running" | "succeeded" | "waiting";
 
+export type PosterCatalogCategory = "movie" | "series" | "short-drama";
+
+export type PosterShortDramaKind = "animation" | "live-action";
+
 export type PosterDrawDimensionKey =
   | "shotScale"
   | "characterPosition"
@@ -36,6 +40,8 @@ export type PosterRecord = {
     style: string;
     tone: string;
   };
+  catalogCategory?: PosterCatalogCategory;
+  catalogSubcategory?: PosterShortDramaKind;
   description: string;
   director?: string;
   genre: string;

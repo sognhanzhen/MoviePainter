@@ -4,6 +4,8 @@ import { buildFilterDefinitions, matchesFilters } from "../client/src/pages/Libr
 
 const definitions = buildFilterDefinitions(curatedMoviePosterRecords, "en-US");
 const zhDefinitions = buildFilterDefinitions(curatedMoviePosterRecords, "zh-CN");
+const seriesDefinitions = buildFilterDefinitions(curatedMoviePosterRecords, "en-US", "series");
+const shortDramaDefinitions = buildFilterDefinitions(curatedMoviePosterRecords, "zh-CN", "short-drama");
 
 function labelsFor(key: "director" | "mood" | "style" | "tone" | "type", language: "en-US" | "zh-CN" = "en-US") {
   const definition = (language === "zh-CN" ? zhDefinitions : definitions).find((filter) => filter.key === key);
@@ -15,6 +17,15 @@ function valuesFor(key: "director" | "mood" | "style" | "tone" | "type", languag
   const definition = (language === "zh-CN" ? zhDefinitions : definitions).find((filter) => filter.key === key);
   assert.ok(definition, `Missing ${key} filter definition`);
   return definition.options.slice(1).map((option) => option.value);
+}
+
+function definitionLabel(
+  definitions: ReturnType<typeof buildFilterDefinitions>,
+  key: "director" | "type"
+) {
+  const definition = definitions.find((filter) => filter.key === key);
+  assert.ok(definition, `Missing ${key} filter definition`);
+  return definition.label;
 }
 
 for (const key of ["type", "style", "mood", "tone"] as const) {
@@ -37,6 +48,10 @@ assert.ok(labelsFor("mood", "zh-CN").includes("沉浸"), "Chinese mood filter sh
 assert.ok(labelsFor("tone", "zh-CN").includes("琥珀对比"), "Chinese tone filter should expose 琥珀对比 as its own option");
 assert.ok(labelsFor("director", "zh-CN").includes("克里斯托弗·诺兰"), "Chinese director filter should align with poster panel director");
 assert.ok(valuesFor("type", "zh-CN").includes("Sci-Fi"), "Chinese type filter values should keep canonical matching tokens");
+assert.equal(definitionLabel(seriesDefinitions, "director"), "Creator", "Series category should relabel director dimension as Creator");
+assert.equal(definitionLabel(seriesDefinitions, "type"), "Series Type", "Series category should relabel genre dimension as Series Type");
+assert.equal(definitionLabel(shortDramaDefinitions, "director"), "出品方", "Short drama category should relabel director dimension as producer/source");
+assert.equal(definitionLabel(shortDramaDefinitions, "type"), "题材", "Short drama category should relabel genre dimension as theme");
 
 const inception = curatedMoviePosterRecords[0];
 

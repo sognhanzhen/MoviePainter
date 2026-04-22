@@ -2,6 +2,10 @@ export type AppDataSource = "local-db" | "local-demo" | "supabase";
 
 export type WorkspaceMode = "chat" | "draw";
 
+export type PosterCatalogCategory = "movie" | "series" | "short-drama";
+
+export type PosterShortDramaKind = "animation" | "live-action";
+
 export type PosterDrawDimensionKey =
   | "shotScale"
   | "characterPosition"
@@ -49,6 +53,8 @@ export type PosterRecord = {
     style: string;
     tone: string;
   };
+  catalogCategory?: PosterCatalogCategory;
+  catalogSubcategory?: PosterShortDramaKind;
   description: string;
   director?: string;
   genre: string;

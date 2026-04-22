@@ -5,7 +5,9 @@ import type {
   HistoryOutputRecord,
   HistoryRecord,
   HistoryRecordDetail,
+  PosterCatalogCategory,
   PosterRecord,
+  PosterShortDramaKind,
   ProviderResult,
   UserProfileRecord,
   UserSettingsInput,
@@ -334,6 +336,8 @@ export function createSupabaseAppDataProvider({
               style: attribute?.style_value ?? "待补充",
               tone: attribute?.tone_value ?? "待补充"
             },
+            catalogCategory: normalizeCatalogCategory(item.catalog_category),
+            catalogSubcategory: normalizeShortDramaKind(item.catalog_subcategory),
             description: String(item.description ?? item.summary ?? ""),
             director: String(item.region ?? "未标注"),
             genre: String(item.genre ?? "未分类"),
@@ -726,6 +730,8 @@ async function getPosterById(supabase: SupabaseClient, fallback: AppDataProvider
           style: attr?.style_value ?? "待补充",
           tone: attr?.tone_value ?? "待补充"
         },
+        catalogCategory: normalizeCatalogCategory(data.catalog_category),
+        catalogSubcategory: normalizeShortDramaKind(data.catalog_subcategory),
         description: String(data.description ?? data.summary ?? ""),
         director: String(data.region ?? "未标注"),
         genre: String(data.genre ?? "未分类"),
@@ -850,6 +856,14 @@ function normalizeLayout(layout: unknown): PosterRecord["layout"] {
   return layout === "featured" || layout === "square" || layout === "tall" || layout === "wide"
     ? layout
     : "square";
+}
+
+function normalizeCatalogCategory(category: unknown): PosterCatalogCategory | undefined {
+  return category === "movie" || category === "series" || category === "short-drama" ? category : undefined;
+}
+
+function normalizeShortDramaKind(kind: unknown): PosterShortDramaKind | undefined {
+  return kind === "animation" || kind === "live-action" ? kind : undefined;
 }
 
 function parseJsonArray(value: unknown) {

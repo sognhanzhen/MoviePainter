@@ -421,6 +421,7 @@ export const curatedMoviePosterRecords: PosterRecord[] = importedMoviePosters.ma
     style: `${movie.genre} movie poster`,
     tone: tonePresets[index % tonePresets.length]
   },
+  catalogCategory: "movie",
   description:
     `${movie.title} is imported from the fanart.tv poster library and completed with IMDb-matched metadata from Wikidata. ` +
     `Director: ${movie.director}. Release date: ${movie.releaseDate}. Full genre labels: ${movie.fullGenre}.`,

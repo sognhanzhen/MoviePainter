@@ -9,6 +9,8 @@ const POSTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 type PosterCache = { posters: PosterRecord[]; savedAt: number; source: AppDataSource };
 
+const localPosterById = new Map(posterRecords.map((poster) => [poster.id, poster]));
+
 function readPosterCache(): PosterCache | null {
   try {
     const raw = localStorage.getItem(POSTER_CACHE_KEY);
@@ -29,10 +31,16 @@ function writePosterCache(posters: PosterRecord[], source: AppDataSource) {
 }
 
 function withPromptPresets(posters: PosterRecord[]) {
-  return posters.map((poster) => ({
-    ...poster,
-    promptPresets: poster.promptPresets ?? getPosterPromptPreset(poster.id)
-  }));
+  return posters.map((poster) => {
+    const localPoster = localPosterById.get(poster.id);
+
+    return {
+      ...poster,
+      catalogCategory: poster.catalogCategory ?? localPoster?.catalogCategory ?? "movie",
+      catalogSubcategory: poster.catalogSubcategory ?? localPoster?.catalogSubcategory,
+      promptPresets: poster.promptPresets ?? getPosterPromptPreset(poster.id)
+    };
+  });
 }
 
 type PosterCatalogState = {
